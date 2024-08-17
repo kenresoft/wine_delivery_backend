@@ -6,17 +6,14 @@ exports.createReview = async (req, res) => {
         const { productId, rating, review } = req.body;
         const userReview = await Review.create({
             userId: req.user.id,
-            // productId,
-            // rating,
+            rating,
             review,
         });
 
         // Update product rating
         const product = await Product.findById(productId);
         product.reviews.push(userReview);
-        // product.numReviews = product.reviews.length;
-        // product.rating = product.reviews.reduce((acc, item) => item.rating + acc, 0) / product.reviews.length;
-
+        
         await product.save();
 
         res.status(201).json({ success: true, review: userReview });
