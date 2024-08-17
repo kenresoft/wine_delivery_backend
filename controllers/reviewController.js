@@ -38,8 +38,6 @@ exports.deleteReview = async (req, res) => {
         // Update product rating
         const product = await Product.findById(req.body.productId);
         product.reviews = product.reviews.filter((rev) => rev.id !== req.params.id);
-        product.numReviews = product.reviews.length;
-        product.rating = product.reviews.reduce((acc, item) => item.rating + acc, 0) / product.reviews.length;
 
         await product.save();
 
