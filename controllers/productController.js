@@ -11,7 +11,10 @@ exports.createProduct = async (req, res) => {
 
 exports.getAllProducts = async (req, res) => {
     try {
-        const products = await Product.find().populate('category');
+        const products = await Product.find()
+            .populate('category')
+            .populate('reviews.user', { password: 0, isAdmin: 0 });
+
         res.status(200).json({ success: true, products });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
