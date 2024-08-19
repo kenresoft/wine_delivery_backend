@@ -38,3 +38,52 @@ exports.updateUser = async (req, res) => {
         res.status(400).json({ success: false, error: error.message });
     }
 };
+
+/* exports.addToFavorites = async (req, res) => {
+    try {
+        const userId = req.user._id; // Extract user ID from the request
+        const productId = req.body.productId; // Get product ID from request body
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        if (user.favorites.includes(productId)) {
+            return res.status(400).json({ success: false, message: 'Product already in favorites' });
+        }
+
+        user.favorites.push(productId);
+        await user.save();
+
+        res.status(200).json({ success: true, message: 'Product added to favorites' });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.removeFromFavorites = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const productId = req.body.productId;
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        // Check if product is in favorites
+        const index = user.favorites.indexOf(productId);
+        if (index === -1) {
+            return res.status(400).json({ success: false, message: 'Product not in favorites' });
+        }
+
+        // Remove product from favorites
+        user.favorites.splice(index, 1);
+        await user.save();
+
+        res.status(200).json({ success: true, message: 'Product removed from favorites' });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+}; */
