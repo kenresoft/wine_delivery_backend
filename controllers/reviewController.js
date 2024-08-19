@@ -16,13 +16,13 @@ exports.createReview = async (req, res) => {
         // Update product rating
         const product = await Product.findById(productId);
         if (!product) {
-            res.status(404).json({ success: false, message: 'Product not found' });
+            return res.status(404).json({ success: false, message: 'Product not found' });
         }
-        else {
-            product.reviews.push(userReview);
-            await product.save();
-            res.status(201).json({ success: true, review: userReview });
-        }
+
+        product.reviews.push(userReview);
+        await product.save();
+
+        res.status(201).json({ success: true, review: userReview });
 
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
