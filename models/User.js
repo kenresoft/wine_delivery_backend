@@ -6,9 +6,9 @@ const userSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     isAdmin: { type: Boolean, default: false },
-    favorites: {
-        type: mongoose.Schema.Types.ObjectId, ref: 'Product', // Reference to the Product model
-    },
+    favorites: [{
+        type: mongoose.Schema.Types.ObjectId, ref: 'Favorite',
+    }],
 });
 
 // Password hashing middleware
