@@ -35,6 +35,62 @@ exports.addToFavorites = async (req, res) => {
     }
 };
 
+exports.getFavoriteById = async (req, res) => {
+    const { productId } = req.params; // Access product ID from params
+
+    try {
+        const user = await User.findById(req.user.id)
+            .select('-password -isAdmin') // Exclude password and isAdmin
+            .populate({
+                path: 'favorites',
+                match: { product: productId }, // Filter favorites by product ID
+                select: 'product', // Only include product field in favorites
+                populate: {
+                    path: 'product',
+                    select: '_id', // Only include _id and name in product
+                    // select: '_id name', // Only include _id and name in product
+                },
+            });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        const favorite = user.favorites.filter(
+            (favorite) => favorite.product._id.toString() === productId
+        ); // Filter again in case of duplicates
+
+        res.status(200).json({ success: true, favorite: favorite });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.getUserFavorites = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select('-password -isAdmin').populate(
+            {
+                path: 'favorites',
+                select: 'product',
+                populate: {
+                    path: 'product',
+                    select: '_id'
+                }
+            }
+        );
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        const favorite = user.favorites;
+
+        res.status(200).json({ success: true, favorite });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
 exports.removeFromFavorites = async (req, res) => {
     try {
         const { productId } = req.body;
@@ -54,4 +110,21 @@ exports.removeFromFavorites = async (req, res) => {
     }
 };
 
-// Other favorite-related functions...
+exports.getAllFavorites = async (req, res) => {
+    try {
+        const users = await User.find().select('-password -isAdmin').populate(
+            {
+                path: 'favorites',
+                select: 'product',
+                populate: {
+                    path: 'product',
+                    select: '_id name'
+                }
+            }
+        );
+        res.status(200).json({ success: true, users });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
