@@ -28,7 +28,10 @@ exports.login = async (req, res) => {
 
 exports.getUserProfile = async (req, res) => {
     try {
-        const user = await User.findById(req.user.id).select('-password');
+        const user = await User.findById(req.user.id).select('-password').populate({
+            path: 'favorites',
+            select: 'product',
+        });
         res.status(200).json({ success: true, user });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
