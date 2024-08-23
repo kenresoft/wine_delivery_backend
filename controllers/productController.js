@@ -9,17 +9,52 @@ exports.createProduct = async (req, res) => {
     }
 };
 
-exports.getAllProducts = async (req, res) => {
+/* exports.getAllProducts = async (req, res) => {
     try {
         const products = await Product.find()
             .populate('category')
-            .populate('reviews.user', { password: 0, isAdmin: 0 });
+            .populate('reviews.user', { password: 0, isAdmin: 0 })
+            .populate({
+                path: 'favorites',
+                select: 'product', // Only include product field in favorites
+                populate: {
+                  path: 'product',
+                  select: '_id name', // Only include _id and name in product
+                },
+              });
 
         res.status(200).json({ success: true, products });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }
-};
+}; */
+
+exports.getAllProducts = async (req, res) => {
+    try {
+      const userId = req.user ? req.user.id : null; // Get user ID if logged in
+  
+      const products = await Product.find()
+        .populate('category')
+        .populate('reviews.user', { password: 0, isAdmin: 0, favorites: 0 });
+  
+      // If user is logged in, fetch their favorites
+      if (userId) {
+        const userFavorites = await User.findById(userId, 'favorites');
+  
+        // Create a set of favorite product IDs for efficient lookup
+        const favoriteProductIds = new Set(userFavorites.favorites.map(f => f.product));
+  
+        // Add a `isFavorited` property to each product
+        products.forEach(product => {
+          product.isFavorited = favoriteProductIds.has(product._id.toString());
+        });
+      }
+  
+      res.status(200).json({ success: true, products });
+    } catch (error) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  };
 
 exports.getProductById = async (req, res) => {
     try {
