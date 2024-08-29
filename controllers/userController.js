@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const upload = require('../middleware/upload'); // Import the multer configuration
 
 exports.getUsers = async (req, res) => {
     try {
@@ -20,7 +21,10 @@ exports.deleteUser = async (req, res) => {
 
 exports.getUserById = async (req, res) => {
     try {
-        const user = await User.findById(req.params.id).select('-password');
+        const user = await User.findById(req.params.id).select('-password').populate({
+            path: 'favorites',
+            select: 'product',
+        });
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
@@ -32,8 +36,31 @@ exports.getUserById = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
     try {
-        const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true }).select('-password');
-        res.status(200).json({ success: true, user });
+        // Handle file upload if a profile image is provided
+        upload(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ success: false, error: err });
+            }
+
+            const { id } = req.params;
+            const updates = req.body;
+
+            // If a new profile image is uploaded, update the path in the user data
+            if (req.file) {
+                updates.profileImage = `/uploads/profileImages/${req.file.filename}`;
+            }
+
+            const user = await User.findByIdAndUpdate(id, updates, { new: true }).select('-password').populate({
+                path: 'favorites',
+                select: 'product',
+            });
+
+            if (!user) {
+                return res.status(404).json({ success: false, message: 'User not found' });
+            }
+
+            res.status(200).json({ success: true, user });
+        });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }

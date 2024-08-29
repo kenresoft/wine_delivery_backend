@@ -6,5 +6,5 @@ const router = express.Router();
 router.get('/', protect, admin, getUsers);
 router.delete('/:id', protect, admin, deleteUser);
 router.get('/:id', protect, admin, getUserById);
-router.put('/:id', protect, admin, updateUser);
+router.put('/:id', protect, /* admin, */ updateUser);
 module.exports = router;
