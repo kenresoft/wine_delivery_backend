@@ -35,7 +35,7 @@ exports.getAllProducts = async (req, res) => {
   
       const products = await Product.find()
         .populate('category')
-        .populate('reviews.user', { password: 0, isAdmin: 0, favorites: 0 });
+        .populate('reviews.user', { password: 0, isAdmin: 0, favorites: 0, profileImage: 0 });
   
       // If user is logged in, fetch their favorites
       if (userId) {
