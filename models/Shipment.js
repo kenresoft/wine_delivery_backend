@@ -40,6 +40,10 @@ const shipmentSchema = new mongoose.Schema({
   note: {
     type: String,
   },
+  deliveryCost: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const Shipment = mongoose.model('Shipment', shipmentSchema);
