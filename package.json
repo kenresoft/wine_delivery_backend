@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "test": "user.test.js",
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
@@ -22,7 +23,8 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.5.3",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "stripe": "^16.9.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",
