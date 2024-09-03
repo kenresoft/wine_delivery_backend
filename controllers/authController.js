@@ -1,3 +1,4 @@
+const RefreshToken = require('../models/RefreshToken');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 
@@ -33,6 +34,13 @@ exports.login = async (req, res) => {
         const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
         const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
 
+        // Store the refresh token in the database
+        await RefreshToken.create({
+            userId: user._id,
+            token: refreshToken,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+        });
+
         res.status(200).json({
             success: true,
             accessToken,
@@ -49,27 +57,85 @@ exports.login = async (req, res) => {
     }
 };
 
-exports.refreshToken = (req, res) => {
+
+/* exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user || !(await user.comparePassword(password))) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    // Generate access and refresh tokens
+    const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
+
+    // Store the refresh token in the database
+    await RefreshToken.create({
+      userId: user._id,
+      token: refreshToken,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+    });
+
+    res.status(200).json({ success: true, accessToken, refreshToken });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+}; */
+
+
+/* exports.refreshToken = (req, res) => {
     const { refreshToken } = req.body;
-  
+
     if (!refreshToken) {
-      return res.status(403).json({ success: false, message: 'Refresh token required' });
+        return res.status(403).json({ success: false, message: 'Refresh token required' });
     }
-  
+
     try {
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-      const newAccessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
-  
-      res.status(200).json({
-        success: true,
-        accessToken: newAccessToken,
-      });
+        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        const newAccessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+
+        res.status(200).json({
+            success: true,
+            accessToken: newAccessToken,
+        });
     } catch (error) {
-      console.error('Refresh Token Error:', error);
-      res.status(403).json({ success: false, message: 'Invalid refresh token' });
+        console.error('Refresh Token Error:', error);
+        res.status(403).json({ success: false, message: 'Invalid refresh token' });
     }
-  };
-  
+}; */
+
+exports.refreshToken = async (req, res) => {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+        return res.status(403).json({ success: false, message: 'Refresh token required' });
+    }
+
+    try {
+        const tokenDoc = await RefreshToken.findOne({ token: refreshToken });
+
+        if (!tokenDoc) {
+            return res.status(401).json({ success: false, message: 'Invalid refresh token' });
+        }
+
+        // Verify refresh token
+        jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
+            if (err) {
+                return res.status(401).json({ success: false, message: 'Invalid or expired refresh token' });
+            }
+
+            // Generate new access token
+            const newAccessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+
+            res.status(200).json({ success: true, accessToken: newAccessToken });
+        });
+    } catch (error) {
+        console.error('Refresh Token Error:', error);
+        res.status(500).json({ success: false, message: 'Server error' + error.message });
+    }
+};
 
 
 exports.getUserProfile = async (req, res) => {
