@@ -1,6 +1,6 @@
 const express = require('express');
 const { createCategory, getAllCategories, getCategoryById, updateCategory, deleteCategory } = require('../controllers/categoryController');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { isAuthenticated: protect, admin } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 router.post('/', protect, admin, createCategory);
