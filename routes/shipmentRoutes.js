@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect } = require('../middleware/authMiddleware');
+const { isAuthenticated: protect } = require('../middleware/authMiddleware');
 const { getShipmentDetails, createShipmentDetails, getShipmentDetailsById, updateShipmentDetails } = require('../controllers/shipmentController');
 
 // Get all delivery addresses for a user (protected route)

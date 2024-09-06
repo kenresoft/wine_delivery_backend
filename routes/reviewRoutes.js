@@ -1,6 +1,6 @@
 const express = require('express');
 const { createReview, getProductReviews, deleteReview } = require('../controllers/reviewController');
-const { protect } = require('../middleware/authMiddleware');
+const { isAuthenticated: protect } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 router.post('/', protect, createReview);
