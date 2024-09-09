@@ -11,7 +11,7 @@ const orderItemSchema = new mongoose.Schema({
         required: true,
         min: 1,
     },
-},);
+}, { _id: false }); // Avoid creating a separate ID for orderItem
 
 const OrderSchema = new mongoose.Schema({
     user: {
@@ -43,13 +43,34 @@ const OrderSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'processing', 'shipped', 'cancelled'],
-        default: 'pending',
+        enum: [
+            'draft',
+            'pending',
+            'processing',
+            'packaging',
+            'shipping',
+            'delivered',
+            'cancelled',
+        ],
+        default: 'draft',
+    },
+    note: {
+        type: String,
+        trim: true, 
+        maxlength: 255, 
+    },
+    trackingNumber: {
+        type: String,
+        trim: true, 
     },
     createdAt: {
         type: Date,
         default: Date.now,
     },
+
+
+    // - taxAmount: { type: Number }, // Amount of tax applied
+
 });
 
 module.exports = mongoose.model('Order', OrderSchema);
