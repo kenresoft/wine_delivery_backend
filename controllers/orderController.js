@@ -1,48 +1,13 @@
 const Order = require('../models/Order');
-const Product = require('../models/Product');
 const Shipment = require('../models/Shipment');
 const User = require('../models/User');
 const Cart = require('../models/Cart');
-const d = require('./cartController');
 require('dotenv').config();
 const Stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-/* exports.createOrder = async (req, res) => {
-    try {
-        const { items, shippingAddress, paymentMethod, totalPrice } = req.body;
-
-        // Check stock availability for each product
-        for (const item of items) {
-            const product = await Product.findById(item.productId);
-            if (product.countInStock < item.quantity) {
-                return res.status(400).json({ success: false, message: `Insufficient stock for product: ${product.name}` });
-            }
-        }
-
-        const order = await Order.create({
-            userId: req.user.id,
-            items,
-            shippingAddress,
-            paymentMethod,
-            totalPrice,
-            isPaid: false,
-            isDelivered: false
-        });
-
-        // Reduce the stock count for each product
-        for (const item of items) {
-            await Product.findByIdAndUpdate(item.productId, { $inc: { countInStock: -item.quantity } });
-        }
-
-        res.status(201).json({ success: true, order });
-    } catch (error) {
-        res.status(400).json({ success: false, error: error.message });
-    }
-}; */
-
 exports.createOrder = async (req, res) => {
     try {
-        const { subTotal, description, currency } = req.body;
+        const { note, subTotal } = req.body;
         const user = await User.findById(req.user.id, { password: 0, isAdmin: 0 });
 
         if (!user) {
@@ -64,29 +29,15 @@ exports.createOrder = async (req, res) => {
 
         // Create order document
         const order = new Order({
-            user: user._id, // Only store user ID
+            user: user._id,
             items: cart.items,
-            shipment: shipment._id, // Only store shipment ID
+            shipment: shipment._id,
             subTotal: subTotal,
             totalCost: subTotal + shipment.deliveryCost,
+            note: note || '',
         });
 
         // const customerId = user ? user._id.toString() : null;
-
-        const paymentResponse = await processPayment(
-            subTotal,
-            description,
-            currency,
-        );
-
-        if (!paymentResponse.success) {
-            return res.status(400).json({
-                success: paymentResponse.success,
-                message: paymentResponse.message,
-            });
-        }
-
-        order.paymentDetails = paymentResponse.data; // Store payment details in order
 
         // Save the order
         await order.save();
@@ -100,6 +51,47 @@ exports.createOrder = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Internal server error: ' + error });
+    }
+};
+
+exports.makePurchase = async (req, res) => {
+    try {
+        const { description, currency, paymentMethod } = req.body;
+        const orderId = req.params.id;
+
+        // Find the order by ID
+        const order = await Order.findById(orderId);
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        const paymentResponse = await processPayment(
+            order.totalCost,
+            description,
+            currency,
+        );
+
+        if (!paymentResponse.success) {
+            return res.status(400).json({
+                success: paymentResponse.success,
+                message: paymentResponse.message,
+            });
+        }
+
+        const trackingNumber = generateTrackingNumber(order.user, order.createdAt, order._id);
+        console.log('Generated tracking number:', trackingNumber);
+
+        order.paymentDetails = paymentResponse.data;
+        order.status = 'pending';
+        order.paymentMethod = paymentMethod;
+        order.trackingNumber = trackingNumber;
+
+        // Save the updated order
+        await order.save();
+
+        res.status(200).json({ success: true, message: 'Payment successful', order });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
     }
 };
 
@@ -132,6 +124,30 @@ async function processPayment(amount, description, currency) {
     }
 }
 
+exports.updateOrder = async (req, res) => {
+    try {
+        const { status, paymentMethod, paymentDetails } = req.body;
+        const orderId = req.params.id;
+
+        // Find the order by ID
+        const order = await Order.findById(orderId).populate('items.product');
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        order.status = status;
+        order.paymentMethod = paymentMethod;
+        order.paymentDetails = paymentDetails;
+
+        // Save the updated order
+        await order.save();
+
+        res.status(200).json({ success: true, order });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
 exports.getUserOrders = async (req, res) => {
     try {
         const orders = await Order.find({ user: req.user.id })/* .populate('items.product') */;
@@ -161,3 +177,22 @@ exports.updateOrderStatus = async (req, res) => {
         res.status(400).json({ success: false, error: error.message });
     }
 };
+
+function generateTrackingNumber(userId, orderDate, orderId) {
+    // Extract the last 4 digits from each ID
+    const userIdPart = userId.toString().slice(-4);
+    const orderIdPart = orderId.toString().slice(4);
+
+    // Format the date as YYYYMMDD
+    const datePart = orderDate.toISOString().slice(0, 10).replace(/-/g, '');
+
+    // Combine the parts and convert to uppercase
+    const trackingNumber = `${userIdPart}${orderIdPart}${datePart}`.toUpperCase();
+
+    // If the tracking number is longer than 10 characters, truncate it
+    if (trackingNumber.length > 10) {
+        return trackingNumber.slice(0, 10);
+    }
+
+    return trackingNumber;
+}
