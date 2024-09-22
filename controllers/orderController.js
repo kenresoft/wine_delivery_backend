@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const Shipment = require('../models/Shipment');
 const User = require('../models/User');
 const Cart = require('../models/Cart');
+const ioInstance = require('../ioInstance');
 require('dotenv').config();
 const Stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
@@ -45,7 +46,11 @@ exports.createOrder = async (req, res) => {
         // Reduce the stock count for each product
         /* for (const item of cart) {
             await Product.findByIdAndUpdate(item.productId, { $inc: { countInStock: -item.quantity } });
-        } */
+        } */ 
+
+        // Emit a real-time event to notify the user
+        const io = ioInstance.getIO();
+        io.emit('orderCreated', { order });
 
         res.status(201).json({ message: 'Order created successfully', order });
     } catch (error) {
@@ -142,6 +147,10 @@ exports.updateOrder = async (req, res) => {
         // Save the updated order
         await order.save();
 
+        // Emit real-time update to clients
+        const io = ioInstance.getIO();
+        io.emit('orderUpdated', { order });
+
         res.status(200).json({ success: true, order });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
@@ -172,6 +181,10 @@ exports.getOrderById = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
     try {
         const order = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        // Emit real-time update to clients
+        const io = ioInstance.getIO();
+        io.emit('orderUpdated', { order });
+
         res.status(200).json({ success: true, order });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
