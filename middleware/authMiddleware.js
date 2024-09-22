@@ -25,6 +25,30 @@ exports.isAuthenticated = async (req, res, next) => {
     }
 };
 
+exports.isSocketAuthenticated = async (socket, next) => {
+    try {
+        const authHeader = socket.handshake.headers.authorization;
+
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return next({ success: false, message: 'No token provided. Access denied.' });
+        }
+
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        const user = await User.findById(decoded.id).select('-password');
+        if (!user) {
+            return next({ success: false, message: 'User not found. Access denied.' });
+        }
+
+        socket.user = user;
+        next();
+    } catch (error) {
+        console.error('Authentication Error:', error.message);
+        next({ success: false, message: 'Invalid or expired token. Access denied.' });
+    }
+};
+
 
 exports.admin = async (req, res, next) => {
     try {
