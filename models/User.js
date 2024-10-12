@@ -22,8 +22,8 @@ userSchema.pre('save', async function (next) {
 });
 
 // Password comparison method
-userSchema.methods.comparePassword = async function (candidatePassword) {
-    return bcrypt.compare(candidatePassword, this.password);
+userSchema.methods.comparePassword = async function (userPassword) {
+    return bcrypt.compare(userPassword, this.password);
 };
 
 // OTP comparison method
