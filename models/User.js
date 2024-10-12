@@ -10,6 +10,8 @@ const userSchema = new mongoose.Schema({
     favorites: [{
         type: mongoose.Schema.Types.ObjectId, ref: 'Favorite',
     }],
+    otpCode: { type: String },            // OTP code field
+    otpExpiresAt: { type: Date },          // OTP expiration field
 });
 
 // Password hashing middleware
@@ -22,6 +24,11 @@ userSchema.pre('save', async function (next) {
 // Password comparison method
 userSchema.methods.comparePassword = async function (candidatePassword) {
     return bcrypt.compare(candidatePassword, this.password);
+};
+
+// OTP comparison method
+userSchema.methods.compareOtp = function (candidateOtp) {
+    return candidateOtp === this.otpCode && Date.now() < this.otpExpiresAt;
 };
 
 const User = mongoose.model('User', userSchema);
