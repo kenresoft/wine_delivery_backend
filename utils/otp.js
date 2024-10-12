@@ -23,9 +23,6 @@ exports.setOtpForUser = async function (user) {
 
 exports.sendOtpEmail = async function (user, otp) {
     try {
-        console.log('Email user:', process.env.EMAIL_USER);  // Should print your email
-        console.log('Email pass:', process.env.EMAIL_PASS);  // Should print the password
-
         const transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
             port: 465,  // Use port 465 for SSL
@@ -64,7 +61,6 @@ exports.sendOtpEmail = async function (user, otp) {
                 </div>
             `
         };
-
 
         // Send the email
         await transporter.sendMail(mailOptions);
