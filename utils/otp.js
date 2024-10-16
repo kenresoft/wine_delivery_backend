@@ -23,6 +23,10 @@ exports.setOtpForUser = async function (user) {
 
 exports.sendOtpEmail = async function (user, otp) {
     try {
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            throw new Error('Email user or password is missing.');
+        }
+
         const transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
             port: 465,  // Use port 465 for SSL
@@ -34,7 +38,7 @@ exports.sendOtpEmail = async function (user, otp) {
         });
 
         const mailOptions = {
-            from: '"Vintiora Admin" <no-reply@wineapp.com>',
+            from: '"Vintiora Admin" <no-reply@vintioraapp.com>',
             to: user.email,
             subject: 'Your One-Time Password (OTP) for Vintiora',
             html: `
