@@ -20,6 +20,7 @@ const promotionRoutes = require('./routes/promotionRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const shipmentRoutes = require('./routes/shipmentRoutes');
+const supplierRoutes = require('./routes/supplierRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -51,6 +52,7 @@ app.use('/api/promotions', promotionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/shipment', shipmentRoutes);
+app.use('/api/suppliers', supplierRoutes);
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, { /* useNewUrlParser: true, useUnifiedTopology: true  */ })
