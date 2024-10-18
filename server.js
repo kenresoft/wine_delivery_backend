@@ -24,7 +24,7 @@ const supplierRoutes = require('./routes/supplierRoutes');
 
 const app = express();
 const server = http.createServer(app);
-const ioInstance = require('./ioInstance');
+const ioInstance = require('./utils/ioInstance');
 // const setupSocket = require('./socket/socketHandler');
 const PORT = process.env.PORT || 5000;
 
