@@ -134,7 +134,7 @@ exports.getCartTotalPrice = async (req, res) => {
 exports.getTotalPrice = async (cart, req) => {
   let totalPrice = 0;
   for (const item of cart.items) {
-    totalPrice += item.product.price * item.quantity;
+    totalPrice += item.product.defaultPrice * item.quantity;
   }
 
   // Apply coupon code discount if valid
