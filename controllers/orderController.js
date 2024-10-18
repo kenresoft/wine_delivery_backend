@@ -2,7 +2,7 @@ const Order = require('../models/Order');
 const Shipment = require('../models/Shipment');
 const User = require('../models/User');
 const Cart = require('../models/Cart');
-const ioInstance = require('../ioInstance');
+const ioInstance = require('../utils/ioInstance');
 require('dotenv').config();
 const Stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
