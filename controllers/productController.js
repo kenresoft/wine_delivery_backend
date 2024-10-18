@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
-const { calculateRelatedProducts } = require('../utils/product');
+const { calculateRelatedProducts, getProductDetails } = require('../utils/product');
 
 // Create a new product
 exports.createProduct = async (req, res) => {
@@ -61,13 +61,12 @@ exports.getProductDetails = async (req, res) => {
         const relatedResult = await calculateRelatedProducts(product);
         product.relatedProducts = relatedResult.relatedProducts;
 
-        res.json({ product, matchInfo: relatedResult.matchInfo});
+        res.json({ product, matchInfo: relatedResult.matchInfo });
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch product details' });
     }
 };
 
-// Fetch all products with default and supplier-specific prices, quantities, discounts, and related products
 exports.getAllProducts = async (req, res) => {
     try {
         const userId = req.user ? req.user.id : null; // Get user ID if logged in
@@ -75,7 +74,7 @@ exports.getAllProducts = async (req, res) => {
         const products = await Product.find()
             .populate('category')
             .populate('suppliers.supplier')
-            .populate('relatedProducts')
+            .populate('relatedProducts', '-_id')
             .populate('reviews.user', { password: 0, isAdmin: 0, favorites: 0, profileImage: 0 });
 
         // If user is logged in, fetch their favorites
@@ -91,8 +90,8 @@ exports.getAllProducts = async (req, res) => {
             });
         }
 
-        // Calculate default values and related products for each product
-        products.forEach(product => {
+        // Process products sequentially using for...of
+        for (const product of products) {
             // Calculate default price, quantity, and discount from suppliers
             product.defaultPrice = product.defaultPrice ||
                 (product.suppliers.length > 0 ?
@@ -109,15 +108,19 @@ exports.getAllProducts = async (req, res) => {
                     product.suppliers.reduce((sum, supplier) => sum + (supplier.discount || 0), 0) / product.suppliers.length
                     : 0);
 
-            // Calculate related products based on various attributes
-            product.relatedProducts = calculateRelatedProducts(product);
-        });
+            getProductDetails(product);
+
+            // Calculate related products
+            const matchedProducts = await calculateRelatedProducts(product);
+            product.relatedProducts = matchedProducts;
+        }
 
         res.status(200).json({ success: true, products });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }
 };
+
 
 // Get multiple products by their IDs with default and supplier-specific values
 exports.getProductsByIds = async (req, res) => {
@@ -156,7 +159,8 @@ exports.getProductsByIds = async (req, res) => {
         }
 
         // Calculate default values and related products for each product
-        products.forEach(product => {
+        for (const product of products) {
+            // Calculate default price, quantity, and discount from suppliers
             product.defaultPrice = product.defaultPrice ||
                 (product.suppliers.length > 0 ?
                     product.suppliers.reduce((sum, supplier) => sum + supplier.price, 0) / product.suppliers.length
@@ -172,12 +176,15 @@ exports.getProductsByIds = async (req, res) => {
                     product.suppliers.reduce((sum, supplier) => sum + (supplier.discount || 0), 0) / product.suppliers.length
                     : 0);
 
+            getProductDetails(product);
+
             // Calculate related products
-            product.relatedProducts = calculateRelatedProducts(product);
+            const matchedProducts = await calculateRelatedProducts(product);
+            product.relatedProducts = matchedProducts;
 
             // Add `isFavorited` property
             product.isFavorited = favoriteProductIds.has(product._id.toString());
-        });
+        };
 
         res.status(200).json({ success: true, products });
     } catch (error) {
@@ -193,7 +200,7 @@ exports.getProductById = async (req, res) => {
         const product = await Product.findById(req.params.id)
             .populate('category')
             .populate('suppliers.supplier')
-            .populate('relatedProducts')
+            .populate('relatedProducts', '-_id') // Exclude _id field
             .populate('reviews.user', { password: 0, isAdmin: 0 });
 
         if (!product) {
@@ -215,6 +222,8 @@ exports.getProductById = async (req, res) => {
             (product.suppliers.length > 0 ?
                 product.suppliers.reduce((sum, supplier) => sum + (supplier.discount || 0), 0) / product.suppliers.length
                 : 0);
+
+        getProductDetails(product);
 
         // Calculate related products
         const matchedProducts = await calculateRelatedProducts(product);
