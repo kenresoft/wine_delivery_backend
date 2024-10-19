@@ -37,7 +37,7 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
     try {
         // Handle file upload if a profile image is provided
-        upload(req, res, async (err) => {
+        upload.uploadProfileImage(req, res, async (err) => {
             if (err) {
                 return res.status(400).json({ success: false, error: err });
             }
