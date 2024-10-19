@@ -7,6 +7,7 @@ const {
     updateProduct,
     deleteProduct,
     getProductsByIds,
+    updateProductImage,
     addReview
 } = require('../controllers/productController');
 
@@ -20,6 +21,7 @@ router.get('/:id', getProductById);                        // Get single product
 router.put('/:id', protect, admin, updateProduct);         // Update product by ID
 router.delete('/:id', protect, admin, deleteProduct);      // Delete product by ID
 
+router.put('/image/:id', protect, admin, updateProductImage); // Update product image by ID
 router.post('/review/:id', protect, admin, addReview); // Add review to product
 
 module.exports = router;
