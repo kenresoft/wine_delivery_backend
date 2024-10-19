@@ -1,34 +1,48 @@
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
+const upload = require('../middleware/upload'); // Assuming you have upload middleware
 const { calculateRelatedProducts, getProductDetails } = require('../utils/product');
 
-// Create a new product
+// Create a new product with image upload
 exports.createProduct = async (req, res) => {
     try {
-        const {
-            name, category, image, alcoholContent, description, sku, brand, tags, weight, dimensions, expirationDate,
-            isFeatured, isNewArrival, isOnSale, variants, shippingCost, relatedProducts, reviews, suppliers
-        } = req.body;
+        // Handle file upload
+        upload.uploadProductImages(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ success: false, error: err });
+            }
 
-        const categoryExists = await Category.findById(category);
-        if (!categoryExists) {
-            return res.status(400).json({ message: 'Invalid category' });
-        }
+            const {
+                name, category, alcoholContent, description, sku, brand, tags, weight, dimensions, expirationDate,
+                isFeatured, isNewArrival, isOnSale, variants, shippingCost, relatedProducts, reviews, suppliers
+            } = req.body;
 
-        // Calculate default price, quantity, and discount from suppliers
-        const defaultPrice = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + supplier.price, 0) / suppliers.length : 0;
-        const defaultQuantity = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + supplier.quantity, 0) : 0;
-        const defaultDiscount = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + (supplier.discount || 0), 0) / suppliers.length : 0;
+            const categoryExists = await Category.findById(category);
+            if (!categoryExists) {
+                return res.status(400).json({ message: 'Invalid category' });
+            }
 
-        const product = new Product({
-            name, category, image, alcoholContent, description, sku, brand, tags, weight, dimensions, expirationDate,
-            isFeatured, isNewArrival, isOnSale, variants, shippingCost, relatedProducts, reviews,
-            suppliers, defaultPrice, defaultQuantity, defaultDiscount
+            // Calculate default price, quantity, and discount from suppliers
+            const defaultPrice = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + supplier.price, 0) / suppliers.length : 0;
+            const defaultQuantity = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + supplier.quantity, 0) : 0;
+            const defaultDiscount = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + (supplier.discount || 0), 0) / suppliers.length : 0;
+
+            // Handle image paths
+            const images = req.files ? req.files.map(file => `/uploads/products/${file.filename}`) : [];
+
+            // Add image path if uploaded
+            // const imagePath = req.file ? `/uploads/productImages/${req.file.filename}` : null;
+
+            const product = new Product({
+                name, category, alcoholContent, description, sku, brand, tags, weight, dimensions, expirationDate,
+                isFeatured, isNewArrival, isOnSale, variants, shippingCost, relatedProducts, reviews,
+                suppliers, defaultPrice, defaultQuantity, defaultDiscount, images
+            });
+
+            await product.save();
+            res.status(201).json({ success: true, product });
         });
-
-        await product.save();
-        res.status(201).json(product);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -243,7 +257,7 @@ exports.getProductById = async (req, res) => {
 };
 
 // Update a product by ID
-exports.updateProduct = async (req, res) => {
+/* exports.updateProduct = async (req, res) => {
     try {
         const { id } = req.params;
         const updatedData = req.body;
@@ -267,6 +281,83 @@ exports.updateProduct = async (req, res) => {
         res.status(200).json(product);
     } catch (error) {
         res.status(500).json({ message: error.message });
+    }
+}; */
+
+// Update an existing product with optional image upload
+exports.updateProduct = async (req, res) => {
+    try {
+        // Handle file upload
+        upload.uploadProductImages(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ success: false, error: err });
+            }
+
+            const { id } = req.params;
+            const updatedData = req.body;
+            
+            const product = await Product.findById(id);
+            if (!product) {
+                return res.status(404).json({ message: 'Product not found' });
+            }
+
+            const categoryExists = await Category.findById(updatedData.category);
+            if (!categoryExists) {
+                return res.status(400).json({ message: 'Invalid category' });
+            }
+
+            // Update suppliers and recalculate price, quantity, and discount if suppliers are updated
+            if (updatedData.suppliers) {
+                const { suppliers } = updatedData;
+                product.defaultPrice = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + supplier.price, 0) / suppliers.length : 0;
+                product.defaultQuantity = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + supplier.quantity, 0) : 0;
+                product.defaultDiscount = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + (supplier.discount || 0), 0) / suppliers.length : 0;
+            }
+
+            // If new images are uploaded, update the product's images array
+            if (req.files) {
+                updates.images = req.files.map(file => `/uploads/products/${file.filename}`);
+            }
+
+            // If a new product image is uploaded, update the image path
+            // if (req.file) {
+            //     updatedData.image = `/uploads/productImages/${req.file.filename}`;
+            // }
+
+            Object.assign(product, updatedData);
+            await product.save();
+
+            res.status(200).json({ success: true, product });
+        });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.updateProductImage = async (req, res) => {
+    try {
+        // Handle file upload for new images
+        upload.uploadProductImages(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ success: false, error: err });
+            }
+
+            const { id } = req.params;
+            const product = await Product.findById(id);
+            if (!product) {
+                return res.status(404).json({ success: false, message: 'Product not found' });
+            }
+
+            // Replace existing images with new ones if provided
+            if (req.files) {
+                product.images = req.files.map(file => `/uploads/products/${file.filename}`);
+            }
+
+            await product.save();
+            res.status(200).json({ success: true, product });
+        });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
     }
 };
 
