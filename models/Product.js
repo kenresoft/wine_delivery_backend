@@ -32,10 +32,11 @@ const productSchema = new mongoose.Schema({
         ref: 'Category',
         required: true
     },
-    image: {
+    images: [String], // Array to store multiple image paths
+    /*     image: {
         type: String,
         required: true
-    },
+    }, */
     // Price management
     defaultPrice: { type: Number }, // Average price calculated from suppliers
     defaultQuantity: { type: Number }, // Total quantity calculated from suppliers
@@ -49,13 +50,13 @@ const productSchema = new mongoose.Schema({
     },
     description: { type: String, required: true },
     deleted: { type: Boolean, default: false },
-/*     sku: {
-        type: String,
-        unique: true,
-    }, */
-    brand: { type: String, default: 'Generic Brand' }, 
+    /*     sku: {
+            type: String,
+            unique: true,
+        }, */
+    brand: { type: String, default: 'Generic Brand' },
     tags: { type: [String], default: [] },
-    weight: { type: Number, default: 0 }, 
+    weight: { type: Number, default: 0 },
     dimensions: {
         length: { type: Number, default: 0 },
         width: { type: Number, default: 0 },
