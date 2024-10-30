@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema({
     }],
     otpCode: { type: String },            // OTP code field
     otpExpiresAt: { type: Date },          // OTP expiration field
+    deviceToken: { type: String },         // Firebase device token field
 });
 
 // Password hashing middleware

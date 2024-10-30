@@ -33,10 +33,7 @@ const productSchema = new mongoose.Schema({
         required: true
     },
     images: [String], // Array to store multiple image paths
-    /*     image: {
-        type: String,
-        required: true
-    }, */
+    image: { type: String },
     // Price management
     defaultPrice: { type: Number }, // Average price calculated from suppliers
     defaultQuantity: { type: Number }, // Total quantity calculated from suppliers
