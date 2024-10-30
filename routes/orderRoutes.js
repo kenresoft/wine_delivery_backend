@@ -7,6 +7,6 @@ router.post('/', protect, createOrder);
 router.get('/user', protect, getUserOrders);
 router.get('/:id', protect, getOrderById);
 router.put('/:id/status', protect, admin, updateOrderStatus);
-router.put('/:id/purchase', protect, makePurchase);
+router.put('/:id/purchase', protect, makePurchase); 
 
 module.exports = router;
