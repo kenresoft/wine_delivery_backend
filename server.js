@@ -29,7 +29,6 @@ const ioInstance = require('./utils/ioInstance');
 const PORT = process.env.PORT || 5000;
 
 // Initialize socket
-// setupSocket(server);
 ioInstance.init(server);  // Initialize the io object with the server
 
 // Middleware

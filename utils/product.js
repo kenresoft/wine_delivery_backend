@@ -1,3 +1,4 @@
+const fs = require('fs');
 const Product = require('../models/Product');
 
 const getProductDetails = (product) => {
@@ -137,4 +138,17 @@ const calculateRelatedProducts = async (product) => {
     }
 };
 
-module.exports = { calculateRelatedProducts, getProductDetails };
+// Helper to delete old files
+const deleteOldFile = (filePath) => {
+    if (fs.existsSync(filePath)) {
+        fs.unlink(filePath, (err) => {
+            if (err) {
+                console.error('Error deleting file:', err);
+            } else {
+                console.log('Old file deleted:', filePath);
+            }
+        });
+    }
+};
+
+module.exports = { calculateRelatedProducts, getProductDetails, deleteOldFile };
