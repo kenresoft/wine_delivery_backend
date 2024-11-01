@@ -25,6 +25,7 @@ exports.createOrder = async (req, res) => {
         const shipment = await Shipment.findOne({ user: user });
 
         if (!shipment) {
+            console.log('No shipment found for user');
             return res.status(400).json({ message: 'No shipping address found for this user' });
         }
 
@@ -159,12 +160,47 @@ exports.updateOrder = async (req, res) => {
 
 exports.getUserOrders = async (req, res) => {
     try {
-        const orders = await Order.find({ user: req.user.id })/* .populate('items.product') */;
-        res.status(200).json({ success: true, orders });
+        // Default page to 1 and limit to 10 if not provided
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        
+        // Calculate skip value
+        const skip = (page - 1) * limit;
+        
+        // Fetch orders with pagination
+        const orders = await Order.find({ user: req.user.id }) /* .populate('items.product') */
+            .skip(skip)
+            .limit(limit) // Limit to the current page's orders
+            .sort({ createdAt: -1 }); // Optional: order by date, latest first
+
+        // Get total count for pagination metadata
+        const totalOrders = await Order.countDocuments({ user: req.user.id });
+        const totalPages = Math.ceil(totalOrders / limit);
+
+        res.status(200).json({
+            success: true,
+            orders,
+            pagination: {
+                currentPage: page,
+                totalPages,
+                pageSize: limit,
+                totalOrders
+            }
+        });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }
 };
+
+
+/* exports.getUserOrders = async (req, res) => {
+    try {
+        const orders = await Order.find({ user: req.user.id }).populate('items.product') ;
+        res.status(200).json({ success: true, orders });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+}; */
 
 exports.getOrderById = async (req, res) => {
     try {
