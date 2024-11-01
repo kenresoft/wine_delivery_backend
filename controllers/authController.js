@@ -12,21 +12,9 @@ exports.checkAuthStatus = (req, res) => {
     });
 };
 
-
-/* exports.register = async (req, res) => {
-    try {
-        const { username, email, password } = req.body;
-        const user = await User.create({ username, email, password });
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        res.status(201).json({ success: true, token });
-    } catch (error) {
-        res.status(400).json({ success: false, error: error.message });
-    }
-}; */
-
 exports.register = async (req, res) => {
     try {
-        const { username, email } = req.body;
+        const { username, email, password } = req.body;
 
         // Check if user already exists
         let user = await User.findOne({ email });
@@ -34,18 +22,11 @@ exports.register = async (req, res) => {
             return res.status(400).json({ success: false, message: 'User already exists' });
         }
 
-        // Generate OTP
-        const otp = generateOTP();
-        const otpExpires = Date.now() + 1 * 60 * 1000;  // Expires in 5 minutes
+        user = await User.create({ username, email, password });
 
-        // Create user with OTP (without setting the password yet)
-        user = await User.create({ username, email, otp, otpExpires });
-
-        // Send OTP to user
-        await sendOTP(email, otp);
-
-        res.status(201).json({ success: true, message: 'OTP sent to email' });
+        res.status(201).json({ success: true, message: 'User created successfully' });
     } catch (error) {
+        console.log(error);
         res.status(400).json({ success: false, error: error.message });
     }
 };
@@ -60,7 +41,7 @@ exports.loginWithPasswordAndOtp = async (req, res) => {
 
         // Password is valid, now generate and send OTP
         const otp = await setOtpForUser(user);
-        
+
         // Send OTP email and handle any potential email errors
         await sendOtpEmail(user, otp);
 
