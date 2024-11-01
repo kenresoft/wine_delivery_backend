@@ -1,8 +1,13 @@
 const mongoose = require('mongoose');
+const path = require('path');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
 const upload = require('../middleware/upload'); // Assuming you have upload middleware
-const { calculateRelatedProducts, getProductDetails } = require('../utils/product');
+const {
+    calculateRelatedProducts,
+    getProductDetails,
+    deleteOldFile,
+} = require('../utils/product');
 
 // Create a new product with image upload
 exports.createProduct = async (req, res) => {
@@ -127,6 +132,12 @@ exports.getAllProducts = async (req, res) => {
             // Calculate related products
             const matchedProducts = await calculateRelatedProducts(product);
             product.relatedProducts = matchedProducts;
+
+            if (product.images.length > 0) {
+                product.image = product.images[0];
+            } else {
+                product.image = null;
+            }
         }
 
         res.status(200).json({ success: true, products });
@@ -196,6 +207,12 @@ exports.getProductsByIds = async (req, res) => {
             const matchedProducts = await calculateRelatedProducts(product);
             product.relatedProducts = matchedProducts;
 
+            if (product.images.length > 0) {
+                product.image = product.images[0];
+            } else {
+                product.image = null;
+            }
+
             // Add `isFavorited` property
             product.isFavorited = favoriteProductIds.has(product._id.toString());
         };
@@ -242,6 +259,12 @@ exports.getProductById = async (req, res) => {
         // Calculate related products
         const matchedProducts = await calculateRelatedProducts(product);
         product.relatedProducts = matchedProducts;
+
+        if (product.images.length > 0) {
+            product.image = product.images[0];
+        } else {
+            product.image = null;
+        }
 
         // Add `isFavorited` if the user is logged in
         if (userId) {
@@ -295,7 +318,7 @@ exports.updateProduct = async (req, res) => {
 
             const { id } = req.params;
             const updatedData = req.body;
-            
+
             const product = await Product.findById(id);
             if (!product) {
                 return res.status(404).json({ message: 'Product not found' });
@@ -348,9 +371,17 @@ exports.updateProductImage = async (req, res) => {
                 return res.status(404).json({ success: false, message: 'Product not found' });
             }
 
-            // Replace existing images with new ones if provided
-            if (req.files) {
-                product.images = req.files.map(file => `/uploads/products/${file.filename}`);
+            if (req.files && req.files.length > 0) {
+                const newImages = req.files.map(file => `${file.destination.replace(/^\./, '')}/${file.filename}`);
+
+                // Preserve existing images not being replaced, and delete old ones
+                const imagesToDelete = product.images.filter(img => !newImages.includes(img));
+
+                // Delete old images asynchronously
+                await Promise.all(imagesToDelete.map(img => deleteOldFile(path.join(__dirname, '..', img))));
+
+                // Update product images with the new images
+                product.images = newImages;
             }
 
             await product.save();
