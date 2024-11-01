@@ -65,3 +65,26 @@ exports.updateUser = async (req, res) => {
         res.status(400).json({ success: false, error: error.message });
     }
 };
+
+exports.saveDeviceToken = async (req, res) => {
+    const { deviceToken } = req.body;
+
+    try {
+        const userId = req.user.id;
+
+        const user = await User.findByIdAndUpdate(
+            userId,
+            { deviceToken },
+            { new: true }         // Return the updated user document
+        );
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        res.status(200).json({ message: 'Device token updated successfully', user });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error', error });
+    }
+};
