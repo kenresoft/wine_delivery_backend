@@ -1,26 +1,37 @@
 const Cart = require('../models/Cart');
 const Coupon = require('../models/Coupon');
+const NotificationService = require('../services/NotificationService');
 
 exports.addToCart = async (req, res) => {
   try {
-    const { productId: product, quantity } = req.body;
-    const cart = await Cart.findOne({ user: req.user.id });
-    if (cart) {
-      const item = cart.items.find(item => item.product.toString() === product);
-      if (item) {
-        item.quantity += quantity;
-      } else {
-        cart.items.push({ product: product, quantity });
-      }
-      await cart.save();
+    const { productId, quantity } = req.body;
+    let cart = await Cart.findOne({ user: req.user.id });
+
+    if (!cart) {
+      cart = new Cart({ user: req.user.id, items: [{ product: productId, quantity }] });
     } else {
-      await Cart.create({ user: req.user.id, items: [{ product, quantity }] });
+      const item = cart.items.find(item => item.product.toString() === productId);
+      item ? (item.quantity += quantity) : cart.items.push({ product: productId, quantity });
     }
+    await cart.save();
+
+    const notificationService = new NotificationService();
+
+    // Send push notification for cart abandonment reminder, adjust delay as needed
+    setTimeout(async () => {
+      await notificationService.sendCartAbandonmentReminder(req.user.id, cart);
+    }, 1000 * 5 * 1 * 1); // Delay example: 24 hours
+
+    // setTimeout(async () => {
+    //   await notificationService.sendCartAbandonmentReminder(req.user.id, cart);
+    // }, 1000 * 60 * 60 * 24); // Delay example: 24 hours
+
     res.status(201).json({ success: true, cart });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
   }
 };
+
 
 exports.getCart = async (req, res) => {
   try {
@@ -110,6 +121,26 @@ exports.decrementCartItem = async (req, res) => {
       res.status(200).json({ success: true, cart });
     } else {
       res.status(404).json({ success: false, message: 'Item not found in cart' });
+    }
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+exports.getCartItemQuantity = async (req, res) => {
+  try {
+    const cart = await Cart.findOne({ user: req.user.id });
+
+    if (cart) {
+      const item = cart.items.find(item => item.product.toString() === req.params.itemId);
+
+      if (item) {
+        return res.status(200).json({ success: true, quantity: item.quantity });
+      } else {
+        return res.status(404).json({ success: false, message: 'Item not found in cart' });
+      }
+    } else {
+      return res.status(404).json({ success: false, message: 'Cart not found' });
     }
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
