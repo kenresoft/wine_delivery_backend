@@ -4,8 +4,8 @@ const { isAuthenticated: protect, admin } = require('../middleware/authMiddlewar
 const router = express.Router();
 
 router.post('/add', protect, addToFavorites);
-router.get('/:productId', protect, admin, getFavoriteById);
-router.get('/', protect, admin, getUserFavorites);
+router.get('/:productId', protect, /* admin, */ getFavoriteById);
+router.get('/', protect, /* admin, */ getUserFavorites);
 router.delete('/remove', protect, removeFromFavorites);
 
 module.exports = router;
