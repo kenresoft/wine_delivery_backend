@@ -142,3 +142,5 @@ gen
 uploads/
 
 config/serviceAccountKey.json
+config/firebase-adminsdk-serviceAccountKey.json
+config/vintiora-app-serviceAccountKey.json
