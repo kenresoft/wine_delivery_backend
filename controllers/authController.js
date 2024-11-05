@@ -2,6 +2,8 @@ const RefreshToken = require('../models/RefreshToken');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const { setOtpForUser, sendOtpEmail } = require('../utils/otp');
+const NotificationService = require('../services/NotificationService');
+const moment = require('moment');
 
 // Function to check if a user is currently logged in
 exports.checkAuthStatus = (req, res) => {
@@ -32,18 +34,30 @@ exports.register = async (req, res) => {
 };
 
 exports.loginWithPasswordAndOtp = async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, deviceInfo } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+
     try {
         const user = await User.findOne({ email });
         if (!user || !(await user.comparePassword(password))) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
+        const attemptData = {
+            date: moment().format('YYYY-MM-DD'),
+            time: moment().format('HH:mm:ss'),
+            ip,
+            device: deviceInfo,
+        };
+
+        const notificationService = new NotificationService();
+        await notificationService.sendLoginAttemptNotifications(user, attemptData);
+
         // Password is valid, now generate and send OTP
         const otp = await setOtpForUser(user);
 
         // Send OTP email and handle any potential email errors
-        await sendOtpEmail(user, otp);
+        // await sendOtpEmail(user, otp);
 
         res.status(200).json({
             success: true,
