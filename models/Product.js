@@ -47,7 +47,7 @@ const productSchema = new mongoose.Schema({
     },
     description: { type: String, required: true },
     deleted: { type: Boolean, default: false },
-    /*     sku: {
+    /* sku: {
             type: String,
             unique: true,
         }, */
@@ -72,6 +72,15 @@ const productSchema = new mongoose.Schema({
     },
     isFeatured: { type: Boolean, default: false },
     isOnSale: { type: Boolean, default: false },
+    currentFlashSale: {
+        flashSale: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'FlashSale'
+        },
+        specialPrice: Number,
+        startDate: Date,
+        endDate: Date
+    },
     variants: [variantSchema],
     shippingCost: { type: Number, default: 0 },
     relatedProducts: [relatedProductSchema],
@@ -80,6 +89,35 @@ const productSchema = new mongoose.Schema({
     timestamps: true, // This will add createdAt and updatedAt fields
     versionKey: 'version'
 });
+
+// Pre-save middleware to handle image logic (for save)
+productSchema.pre('save', function (next) {
+    handleImageLogic(this);
+    next();
+});
+
+// Pre-save middleware to handle image logic (for findOneAndUpdate)
+productSchema.pre('findOneAndUpdate', function (next) {
+    handleImageLogic(this.getUpdate());
+    next();
+});
+
+// Pre-save middleware to handle image logic (for updateOne)
+productSchema.pre('updateOne', function (next) {
+    handleImageLogic(this.getUpdate());
+    next();
+});
+
+// Helper function to handle image logic
+function handleImageLogic(doc) {
+    if (!doc.image) {
+        if (doc.images && doc.images.length > 0) {
+            doc.image = doc.images[0]; // first image from images array
+        } else {
+            doc.image = '/assets/images/vintiora-wine.png'; // default image path
+        }
+    }
+}
 
 // Virtual fields for price calculations (consider using getters instead)
 productSchema.virtual('formattedPrice').get(function () {

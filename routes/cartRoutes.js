@@ -19,7 +19,7 @@ router.put('/increment/:itemId', protect, incrementCartItem);
 router.put('/decrement/:itemId', protect, decrementCartItem);
 router.get('/quantity/:itemId', protect, getCartItemQuantity);
 router.get('/', protect, getCart);
-router.post('/price', protect, getTotalPrice);
+router.get('/price', protect, getTotalPrice);
 router.put('/:itemId', protect, updateCart);
 router.delete('/:itemId', protect, removeFromCart);
 router.delete('/', protect, removeAllFromCart);

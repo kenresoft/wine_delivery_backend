@@ -626,3 +626,452 @@ exports.getDiscountedPrice = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// Search products with advanced filtering, sorting, and pagination
+exports.searchProducts = async (req, res) => {
+    try {
+        // Extract query parameters
+        const {
+            keyword,
+            category,
+            minPrice,
+            maxPrice,
+            brand,
+            alcoholContent,
+            inStock,
+            isOnSale,
+            isFeatured,
+            isNewArrival,
+            sortBy,
+            sortOrder,
+            page = 1,
+            limit = 10
+        } = req.query;
+
+        // Build filter object
+        const filter = {};
+
+        // Keyword search across multiple fields
+        if (keyword) {
+            filter.$or = [
+                { name: { $regex: keyword, $options: 'i' } },
+                { description: { $regex: keyword, $options: 'i' } },
+                { brand: { $regex: keyword, $options: 'i' } },
+                { tags: { $regex: keyword, $options: 'i' } }
+            ];
+        }
+
+        // Category filter
+        if (category) {
+            // Support for multiple categories
+            if (Array.isArray(category)) {
+                filter.category = { $in: category.map(c => ObjectId(c)) };
+            } else {
+                filter.category = ObjectId(category);
+            }
+        }
+
+        // Price range filter
+        if (minPrice !== undefined || maxPrice !== undefined) {
+            filter.defaultPrice = {};
+            if (minPrice !== undefined) filter.defaultPrice.$gte = Number(minPrice);
+            if (maxPrice !== undefined) filter.defaultPrice.$lte = Number(maxPrice);
+        }
+
+        // Brand filter
+        if (brand) {
+            // Support for multiple brands
+            if (Array.isArray(brand)) {
+                filter.brand = { $in: brand };
+            } else {
+                filter.brand = brand;
+            }
+        }
+
+        // Alcohol content filter
+        if (alcoholContent) {
+            const [min, max] = alcoholContent.split('-').map(Number);
+            filter.alcoholContent = { $gte: min, $lte: max };
+        }
+
+        // Stock status filter
+        if (inStock === 'true') {
+            filter.stockStatus = 'In Stock';
+        } else if (inStock === 'false') {
+            filter.stockStatus = { $ne: 'In Stock' };
+        }
+
+        // Boolean filters
+        if (isOnSale) filter.isOnSale = isOnSale === 'true';
+        if (isFeatured) filter.isFeatured = isFeatured === 'true';
+        if (isNewArrival) filter.isNewArrival = isNewArrival === 'true';
+
+        // Only include non-deleted products
+        filter.deleted = false;
+
+        // Build sort object
+        const sort = {};
+        if (sortBy) {
+            // Default to ascending order
+            sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+        } else {
+            // Default sort by creation date (newest first)
+            sort.createdAt = -1;
+        }
+
+        // Calculate pagination values
+        const pageNum = parseInt(page, 10);
+        const limitNum = parseInt(limit, 10);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Execute query with pagination
+        const products = await Product.find(filter)
+            .sort(sort)
+            .skip(skip)
+            .limit(limitNum)
+            .populate('category', 'name')
+            .lean();
+
+        // Get total count for pagination metadata
+        const totalProducts = await Product.countDocuments(filter);
+        const totalPages = Math.ceil(totalProducts / limitNum);
+
+        res.status(200).json({
+            success: true,
+            currentPage: pageNum,
+            totalPages,
+            totalProducts,
+            resultsPerPage: limitNum,
+            products
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: process.env.NODE_ENV === 'production' ? null : error.stack
+        });
+    }
+};
+
+// Get products by category with filtering and pagination
+exports.getProductsByCategory = async (req, res) => {
+    try {
+        const { categoryId } = req.params;
+        const { page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+
+        // Validate category existence
+        const category = await Category.findById(categoryId);
+        if (!category) {
+            return res.status(404).json({
+                success: false,
+                message: 'Category not found'
+            });
+        }
+
+        // Calculate pagination values
+        const pageNum = parseInt(page, 10);
+        const limitNum = parseInt(limit, 10);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Build sort object
+        const sort = {};
+        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+        // Execute query
+        const products = await Product.find({
+            category: categoryId,
+            deleted: false
+        })
+            .sort(sort)
+            .skip(skip)
+            .limit(limitNum)
+            .populate('category', 'name')
+            .lean();
+
+        // Get total count for pagination
+        const totalProducts = await Product.countDocuments({
+            category: categoryId,
+            deleted: false
+        });
+
+        const totalPages = Math.ceil(totalProducts / limitNum);
+
+        res.status(200).json({
+            success: true,
+            category: category.name,
+            currentPage: pageNum,
+            totalPages,
+            totalProducts,
+            resultsPerPage: limitNum,
+            products
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: process.env.NODE_ENV === 'production' ? null : error.stack
+        });
+    }
+};
+
+// Get popular products based on order metrics
+exports.getPopularProducts = async (req, res) => {
+    try {
+        const { limit = 8, days = 30 } = req.query;
+
+        // Calculate date threshold for recent popularity (last X days)
+        const dateThreshold = new Date();
+        dateThreshold.setDate(dateThreshold.getDate() - parseInt(days));
+
+        // This implementation assumes you have an Order model with orderItems
+        // If you're using a different schema, adjust the aggregation accordingly
+        const popularProducts = await Order.aggregate([
+            // Match orders from the specified period
+            {
+                $match: {
+                    createdAt: { $gte: dateThreshold },
+                    status: { $in: ['completed', 'delivered'] }
+                }
+            },
+
+            // Unwind order items to process each product separately
+            { $unwind: '$orderItems' },
+
+            // Group by product ID and sum quantities
+            {
+                $group: {
+                    _id: '$orderItems.product',
+                    totalQuantity: { $sum: '$orderItems.quantity' },
+                    orderCount: { $sum: 1 }
+                }
+            },
+
+            // Sort by total quantity sold (descending)
+            { $sort: { totalQuantity: -1 } },
+
+            // Limit results
+            { $limit: parseInt(limit) },
+
+            // Lookup product details
+            {
+                $lookup: {
+                    from: 'products',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'productDetails'
+                }
+            },
+
+            // Unwind product details
+            { $unwind: '$productDetails' },
+
+            // Filter out deleted products
+            { $match: { 'productDetails.deleted': false } },
+
+            // Project only necessary fields
+            {
+                $project: {
+                    _id: '$productDetails._id',
+                    name: '$productDetails.name',
+                    image: '$productDetails.image',
+                    defaultPrice: '$productDetails.defaultPrice',
+                    brand: '$productDetails.brand',
+                    category: '$productDetails.category',
+                    isOnSale: '$productDetails.isOnSale',
+                    defaultDiscount: '$productDetails.defaultDiscount',
+                    totalQuantitySold: '$totalQuantity',
+                    popularityScore: {
+                        $add: [
+                            { $multiply: ['$totalQuantity', 1] },  // Weight for quantity sold
+                            { $multiply: ['$orderCount', 0.5] }    // Weight for order count
+                        ]
+                    }
+                }
+            },
+
+            // Final sort by popularity score
+            { $sort: { popularityScore: -1 } }
+        ]);
+
+        // Populate category information
+        await Product.populate(popularProducts, { path: 'category', select: 'name' });
+
+        res.status(200).json({
+            success: true,
+            timeFrame: `${days} days`,
+            products: popularProducts
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: process.env.NODE_ENV === 'production' ? null : error.stack
+        });
+    }
+};
+
+// Get top-rated products
+exports.getTopRatedProducts = async (req, res) => {
+    try {
+        const { limit = 5 } = req.query;
+
+        // Find products with reviews, calculate average rating using aggregation
+        const products = await Product.aggregate([
+            // Match only non-deleted products with at least one review
+            { $match: { deleted: false, 'reviews.0': { $exists: true } } },
+
+            // Unwind reviews array to process each review
+            { $unwind: '$reviews' },
+
+            // Group back by product id and calculate average rating
+            {
+                $group: {
+                    _id: '$_id',
+                    name: { $first: '$name' },
+                    image: { $first: '$image' },
+                    defaultPrice: { $first: '$defaultPrice' },
+                    brand: { $first: '$brand' },
+                    category: { $first: '$category' },
+                    isOnSale: { $first: '$isOnSale' },
+                    defaultDiscount: { $first: '$defaultDiscount' },
+                    averageRating: { $avg: '$reviews.rating' },
+                    reviewCount: { $sum: 1 }
+                }
+            },
+
+            // Sort by average rating (descending)
+            { $sort: { averageRating: -1 } },
+
+            // Limit results
+            { $limit: parseInt(limit, 10) }
+        ]);
+
+        // Populate category information
+        await Product.populate(products, { path: 'category', select: 'name' });
+
+        res.status(200).json({
+            success: true,
+            products
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
+
+// Get recently added products
+exports.getNewArrivals = async (req, res) => {
+    try {
+        const { limit = 8 } = req.query;
+
+        const products = await Product.find({
+            deleted: false,
+            isNewArrival: true
+        })
+            .sort({ createdAt: -1 })
+            .limit(parseInt(limit, 10))
+            .populate('category', 'name')
+            .lean();
+
+        res.status(200).json({
+            success: true,
+            products
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
+
+// Get products on sale
+exports.getProductsOnSale = async (req, res) => {
+    try {
+        const { limit = 8 } = req.query;
+
+        const products = await Product.find({
+            deleted: false,
+            isOnSale: true,
+            defaultDiscount: { $gt: 0 }
+        })
+            .sort({ defaultDiscount: -1 })
+            .limit(parseInt(limit, 10))
+            .populate('category', 'name')
+            .lean();
+
+        res.status(200).json({
+            success: true,
+            products
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
+
+// Get related products
+exports.getRelatedProducts = async (req, res) => {
+    try {
+        const { productId } = req.params;
+        const { limit = 4 } = req.query;
+
+        // Find the product and its related products
+        const product = await Product.findById(productId)
+            .select('relatedProducts category brand tags alcoholContent')
+            .populate({
+                path: 'relatedProducts.product',
+                select: 'name image defaultPrice brand isOnSale defaultDiscount'
+            });
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        // Extract related products
+        let relatedProducts = product.relatedProducts.map(rp => rp.product);
+
+        // If not enough related products are explicitly defined,
+        // find similar products based on category, brand, etc.
+        if (relatedProducts.length < parseInt(limit, 10)) {
+            const additionalProducts = await Product.find({
+                _id: { $ne: productId },
+                deleted: false,
+                $or: [
+                    { category: product.category },
+                    { brand: product.brand },
+                    { tags: { $in: product.tags } },
+                    {
+                        alcoholContent: {
+                            $gte: product.alcoholContent - 5,
+                            $lte: product.alcoholContent + 5
+                        }
+                    }
+                ]
+            })
+                .limit(parseInt(limit, 10) - relatedProducts.length)
+                .select('name image defaultPrice brand isOnSale defaultDiscount')
+                .lean();
+
+            // Combine explicit related products with additional similar products
+            relatedProducts = [...relatedProducts, ...additionalProducts];
+        }
+
+        res.status(200).json({
+            success: true,
+            relatedProducts: relatedProducts.slice(0, parseInt(limit, 10))
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};

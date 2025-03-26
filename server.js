@@ -17,6 +17,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const userRoutes = require('./routes/userRoutes');
 const favoritesRoutes = require('./routes/favoriteRoutes');
 const promotionRoutes = require('./routes/promotionRoutes');
+const flashSaleRoutes = require('./routes/flashSaleRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const shipmentRoutes = require('./routes/shipmentRoutes');
@@ -35,8 +36,9 @@ ioInstance.init(server);  // Initialize the io object with the server
 app.use(cors());
 app.use(bodyParser.json());
 
-// Serve static files from the uploads directory
+// Serve static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -48,6 +50,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/promotions', promotionRoutes);
+app.use('/api/flash-sales', flashSaleRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/shipment', shipmentRoutes);
@@ -56,4 +59,4 @@ app.use('/api/suppliers', supplierRoutes);
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, { /* useNewUrlParser: true, useUnifiedTopology: true  */ })
   .then(() => server.listen(PORT, () => console.log(`Server running on port ${PORT}`)))
-  .catch(error => console.error(error));
+  .catch(error => console.error(error)); 

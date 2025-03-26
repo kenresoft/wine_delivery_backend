@@ -149,9 +149,10 @@ exports.getCartItemQuantity = async (req, res) => {
 
 exports.getCartTotalPrice = async (req, res) => {
   try {
+    const couponCode = req.query.couponCode || '';
     const cart = await Cart.findOne({ user: req.user.id }).populate('items.product');
     if (cart) {
-      let totalPrice = await this.getTotalPrice(cart, req);
+      let totalPrice = await this.getTotalPrice(cart, couponCode);
 
       res.status(200).json({ success: true, totalPrice });
     } else {
@@ -162,14 +163,13 @@ exports.getCartTotalPrice = async (req, res) => {
   }
 };
 
-exports.getTotalPrice = async (cart, req) => {
+exports.getTotalPrice = async (cart, couponCode) => {
   let totalPrice = 0;
   for (const item of cart.items) {
     totalPrice += item.product.defaultPrice * item.quantity;
   }
 
-  // Apply coupon code discount if valid
-  const couponCode = req.body.couponCode; // Assuming coupon code is sent in the request body
+  // Apply coupon code discount if valid // Assuming coupon code is sent in the request body
   if (couponCode) {
     const coupon = await Coupon.findOne({ code: couponCode, isActive: true });
     if (coupon && coupon.expiryDate > new Date()) {

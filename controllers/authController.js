@@ -126,8 +126,9 @@ exports.refreshToken = async (req, res) => {
             }
 
             // Generate new access token
-            const newAccessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: '5h' });
-            // const newAccessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+            // const newAccessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: '5h' });
+            // const newAccessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: '1m' });
+            const newAccessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
 
             res.status(200).json({ success: true, accessToken: newAccessToken });
         });
@@ -191,7 +192,7 @@ exports.verifyOtp = async (req, res) => {
         }
 
         // OTP is valid, generate JWT token
-        const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '5h' });
+        const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
         const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
 
         // Store the refresh token in the database
