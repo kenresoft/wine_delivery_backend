@@ -15,7 +15,7 @@ const router = express.Router();
 router.post('/', protect, createOrder);
 router.get('/user', protect, getUserOrders);
 // router.get('/my-orders', protect, getMyOrders);
-router.get('/:id', protect, getOrderById);
+router.get('/:id', /* protect, */ getOrderById);
 router.put('/:id/purchase', protect, makePurchase);
 
 // Admin order routes

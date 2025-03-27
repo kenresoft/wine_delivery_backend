@@ -68,7 +68,9 @@ const productSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }, // Ensure createdAt is defined
     isNewArrival: {
         type: Boolean,
-        default: false,
+        default: function() { // Use a function to set default dynamically
+            return this.createdAt >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        }
     },
     isFeatured: { type: Boolean, default: false },
     isOnSale: { type: Boolean, default: false },
@@ -119,7 +121,7 @@ function handleImageLogic(doc) {
     }
 }
 
-// Virtual fields for price calculations (consider using getters instead)
+// Virtual fields for price calculations
 productSchema.virtual('formattedPrice').get(function () {
     // Use defaultPrice if set, otherwise calculate average from suppliers
     const price = this.defaultPrice || this.suppliers.reduce((sum, supplier) => sum + supplier.price, 0) / this.suppliers.length;
@@ -131,14 +133,14 @@ productSchema.virtual('discountedPrice').get(function () {
     return price * (1 - this.discountPercentage / 100);
 });
 
-// Methods for calculating average rating (consider using a middleware)
+// Methods for calculating average rating
 productSchema.methods.calculateAverageRating = function () {
     if (this.reviews.length === 0) return 0;
     const sum = this.reviews.reduce((acc, review) => acc + review.rating, 0);
     return sum / this.reviews.length;
 };
 
-// Indexing (consider using a compound index if needed)
+// Indexing
 productSchema.index({ category: 1, defaultPrice: 1 });
 
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);

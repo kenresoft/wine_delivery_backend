@@ -22,7 +22,7 @@ const { isAuthenticated: protect, admin } = require('../middleware/authMiddlewar
 const router = express.Router();
 
 // Core CRUD operations
-router.post('/', protect, admin, createProduct);
+router.post('/',/*  protect, admin, */ createProduct);
 router.get('/', getAllProducts);
 router.get('/ids/:ids', getProductsByIds);
 router.get('/:id', getProductById);
@@ -36,10 +36,10 @@ router.get('/search/products', searchProducts);
 router.get('/category/:categoryId', getProductsByCategory);
 
 // Specialized product listings
-router.get('/listings/popular', getPopularProducts);
-router.get('/listings/top-rated', getTopRatedProducts);
-router.get('/listings/new-arrivals', getNewArrivals);
-router.get('/listings/on-sale', getProductsOnSale);
+router.get('/listings/popular', getPopularProducts); //✅ 
+router.get('/listings/top-rated', getTopRatedProducts); // ✅
+router.get('/listings/new-arrivals', getNewArrivals); // ✅
+router.get('/listings/on-sale', getProductsOnSale); // ✅
 router.get('/related/:productId', getRelatedProducts);
 
 module.exports = router;
