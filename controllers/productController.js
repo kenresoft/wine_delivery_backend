@@ -2,14 +2,17 @@ const mongoose = require('mongoose');
 const path = require('path');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
-const upload = require('../middleware/upload'); // Assuming you have upload middleware
+const Order = require('../models/Order');
+const upload = require('../middleware/upload');
 const {
     calculateRelatedProducts,
     getProductDetails,
     deleteOldFile,
 } = require('../utils/product');
+const dotenv = require('dotenv');
 
-// Create a new product with image upload
+dotenv.config();
+
 exports.createProduct = async (req, res) => {
     try {
         // Handle file upload
@@ -53,8 +56,6 @@ exports.createProduct = async (req, res) => {
     }
 };
 
-
-// Fetch product details with default and supplier-specific prices, quantity, discount, and related products
 exports.getProductDetails = async (req, res) => {
     try {
         const productId = req.params.id;
@@ -132,12 +133,6 @@ exports.getAllProducts = async (req, res) => {
             // Calculate related products
             const matchedProducts = await calculateRelatedProducts(product);
             product.relatedProducts = matchedProducts;
-
-            if (product.images.length > 0) {
-                product.image = product.images[0];
-            } else {
-                product.image = null;
-            }
         }
 
         res.status(200).json({ success: true, products });
@@ -146,8 +141,6 @@ exports.getAllProducts = async (req, res) => {
     }
 };
 
-
-// Get multiple products by their IDs with default and supplier-specific values
 exports.getProductsByIds = async (req, res) => {
     try {
         const productIds = req.params.ids;
@@ -207,12 +200,6 @@ exports.getProductsByIds = async (req, res) => {
             const matchedProducts = await calculateRelatedProducts(product);
             product.relatedProducts = matchedProducts;
 
-            if (product.images.length > 0) {
-                product.image = product.images[0];
-            } else {
-                product.image = null;
-            }
-
             // Add `isFavorited` property
             product.isFavorited = favoriteProductIds.has(product._id.toString());
         };
@@ -223,7 +210,6 @@ exports.getProductsByIds = async (req, res) => {
     }
 };
 
-// Get a single product by ID with default and supplier-specific values
 exports.getProductById = async (req, res) => {
     try {
         const userId = req.user ? req.user.id : null; // Get user ID if logged in
@@ -260,12 +246,6 @@ exports.getProductById = async (req, res) => {
         const matchedProducts = await calculateRelatedProducts(product);
         product.relatedProducts = matchedProducts;
 
-        if (product.images.length > 0) {
-            product.image = product.images[0];
-        } else {
-            product.image = null;
-        }
-
         // Add `isFavorited` if the user is logged in
         if (userId) {
             const userFavorites = await User.findById(userId, 'favorites');
@@ -279,35 +259,6 @@ exports.getProductById = async (req, res) => {
     }
 };
 
-// Update a product by ID
-/* exports.updateProduct = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updatedData = req.body;
-
-        const product = await Product.findById(id);
-        if (!product) {
-            return res.status(404).json({ message: 'Product not found' });
-        }
-
-        // Update suppliers and recalculate price, quantity, and discount if suppliers are updated
-        if (updatedData.suppliers) {
-            const { suppliers } = updatedData;
-            product.defaultPrice = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + supplier.price, 0) / suppliers.length : 0;
-            product.defaultQuantity = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + supplier.quantity, 0) : 0;
-            product.defaultDiscount = suppliers.length > 0 ? suppliers.reduce((sum, supplier) => sum + (supplier.discount || 0), 0) / suppliers.length : 0;
-        }
-
-        Object.assign(product, updatedData);
-        await product.save();
-
-        res.status(200).json(product);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-}; */
-
-// Update an existing product with optional image upload
 exports.updateProduct = async (req, res) => {
     try {
         // Handle file upload
@@ -392,8 +343,6 @@ exports.updateProductImage = async (req, res) => {
     }
 };
 
-
-// Delete a product by ID
 exports.deleteProduct = async (req, res) => {
     try {
         const { id } = req.params;
@@ -411,7 +360,6 @@ exports.deleteProduct = async (req, res) => {
     }
 };
 
-// Add a review to a product
 exports.addReview = async (req, res) => {
     try {
         const { id } = req.params;
@@ -439,7 +387,6 @@ exports.addReview = async (req, res) => {
     }
 };
 
-// Update stock status
 exports.updateStockStatus = async (req, res) => {
     try {
         const { id } = req.params;
@@ -459,7 +406,6 @@ exports.updateStockStatus = async (req, res) => {
     }
 };
 
-// Update product variants
 exports.updateVariants = async (req, res) => {
     try {
         const { id } = req.params;
@@ -479,7 +425,6 @@ exports.updateVariants = async (req, res) => {
     }
 };
 
-// Update product tags
 exports.updateTags = async (req, res) => {
     try {
         const { id } = req.params;
@@ -499,7 +444,6 @@ exports.updateTags = async (req, res) => {
     }
 };
 
-// Update product dimensions
 exports.updateDimensions = async (req, res) => {
     try {
         const { id } = req.params;
@@ -519,7 +463,6 @@ exports.updateDimensions = async (req, res) => {
     }
 };
 
-/// NEW
 exports.getDiscountedPrice = async (req, res) => {
     try {
         const { id } = req.params;
@@ -823,25 +766,23 @@ exports.getPopularProducts = async (req, res) => {
         const dateThreshold = new Date();
         dateThreshold.setDate(dateThreshold.getDate() - parseInt(days));
 
-        // This implementation assumes you have an Order model with orderItems
-        // If you're using a different schema, adjust the aggregation accordingly
         const popularProducts = await Order.aggregate([
             // Match orders from the specified period
             {
                 $match: {
                     createdAt: { $gte: dateThreshold },
-                    status: { $in: ['completed', 'delivered'] }
+                    status: { $in: ['completed', 'delivered', 'pending'] } // we can remove `pending` later.
                 }
             },
 
             // Unwind order items to process each product separately
-            { $unwind: '$orderItems' },
+            { $unwind: '$items' },
 
             // Group by product ID and sum quantities
             {
                 $group: {
-                    _id: '$orderItems.product',
-                    totalQuantity: { $sum: '$orderItems.quantity' },
+                    _id: '$items.product',
+                    totalQuantity: { $sum: '$items.quantity' },
                     orderCount: { $sum: 1 }
                 }
             },
@@ -1035,7 +976,7 @@ exports.getRelatedProducts = async (req, res) => {
             });
         }
 
-        // Extract related products
+        // Extract related products 
         let relatedProducts = product.relatedProducts.map(rp => rp.product);
 
         // If not enough related products are explicitly defined,
@@ -1074,4 +1015,4 @@ exports.getRelatedProducts = async (req, res) => {
             error: error.message
         });
     }
-};
+}; 
