@@ -1,62 +1,49 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const path = require('path');
 const http = require('http');
+const mongoose = require('mongoose');
 const dotenv = require('dotenv');
+const app = require('./app');
+const ioInstance = require('./utils/ioInstance');
 
 dotenv.config();
 
-const authRoutes = require('./routes/authRoutes');
-const productRoutes = require('./routes/productRoutes');
-const categoryRoutes = require('./routes/categoryRoutes');
-const cartRoutes = require('./routes/cartRoutes');
-const couponRoutes = require('./routes/couponRoutes');
-const orderRoutes = require('./routes/orderRoutes');
-const userRoutes = require('./routes/userRoutes');
-const favoritesRoutes = require('./routes/favoriteRoutes');
-const promotionRoutes = require('./routes/promotionRoutes');
-const flashSaleRoutes = require('./routes/flashSaleRoutes');
-const notificationRoutes = require('./routes/notificationRoutes');
-const reviewRoutes = require('./routes/reviewRoutes');
-const shipmentRoutes = require('./routes/shipmentRoutes');
-const supplierRoutes = require('./routes/supplierRoutes');
-
-const app = express();
-const server = http.createServer(app);
-const ioInstance = require('./utils/ioInstance');
-// const setupSocket = require('./socket/socketHandler');
 const PORT = process.env.PORT || 5000;
+const server = http.createServer(app);
 
-// Initialize socket
-ioInstance.init(server);  // Initialize the io object with the server
+// Initialize socket.io
+ioInstance.init(server);
 
-// Middleware
-app.use(cors());
-app.use(bodyParser.json());
+// Database connection and server startup
+const startServer = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      // useNewUrlParser: true,
+      // useUnifiedTopology: true
+    });
+    console.log('✅ MongoDB connected successfully');
 
-// Serve static files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Database connection failed', error);
+    process.exit(1);
+  }
+};
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/coupon', couponRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/favorites', favoritesRoutes);
-app.use('/api/promotions', promotionRoutes);
-app.use('/api/flash-sales', flashSaleRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/api/shipment', shipmentRoutes);
-app.use('/api/suppliers', supplierRoutes);
+// Error handlers
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION! 💥 Shutting down gracefully...');
+  console.error(err.name, err.message, err.stack);
+  setTimeout(() => {
+    process.exit(1);
+  }, 1500);
+});
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, { /* useNewUrlParser: true, useUnifiedTopology: true  */ })
-  .then(() => server.listen(PORT, () => console.log(`Server running on port ${PORT}`)))
-  .catch(error => console.error(error)); 
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
+  console.error(err.name, err.message, err.stack);
+  process.exit(1);
+});
+
+// Start the application
+startServer();
