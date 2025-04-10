@@ -258,169 +258,6 @@ exports.getCartItemQuantity = asyncHandler(async (req, res) => {
   });
 });
 
-/* exports.applyCoupon = asyncHandler(async (req, res) => {
-  const { couponCode } = req.body;
-
-  if (!couponCode) {
-    throw new AppError('Coupon code is required', 400);
-  }
-
-  const cart = await Cart.findOne({ user: req.user.id })
-    .populate('items.product', 'defaultPrice');
-
-  if (!cart || cart.items.length === 0) {
-    throw new AppError('Cannot apply coupon to an empty cart', 400);
-  }
-
-  // Validate coupon eligibility
-  const coupon = await Coupon.findOne({
-    code: couponCode,
-    isActive: true,
-    expiryDate: { $gt: new Date() }
-  });
-
-  if (!coupon) {
-    throw new AppError('Invalid or expired coupon code', 400);
-  }
-
-  // Calculate cart subtotal for minimum purchase validation
-  let subtotal = 0;
-  for (const item of cart.items) {
-    if (!item.product || !item.product.defaultPrice) {
-      throw new AppError('Invalid product data in cart', 400);
-    }
-    subtotal += item.product.defaultPrice * item.quantity;
-  }
-
-  // Validate minimum purchase requirement
-  if (coupon.minimumPurchaseAmount && subtotal < coupon.minimumPurchaseAmount) {
-    throw new AppError(
-      `Minimum purchase of $${coupon.minimumPurchaseAmount} required to use this coupon`,
-      400
-    );
-  }
-
-  // Calculate discount amount
-  const discountAmount = subtotal * (coupon.discount / 100);
-
-  // Update cart with applied coupon
-  cart.appliedCoupon = {
-    code: coupon.code,
-    discount: coupon.discount,
-    discountAmount: Number(discountAmount.toFixed(2))
-  };
-
-  await cart.save();
-  logger.info(`Coupon ${couponCode} applied to cart for user ${req.user.id}`);
-
-  // Calculate final totals after discount for response
-  const total = Number((subtotal - discountAmount).toFixed(2));
-
-  res.status(200).json({
-    success: true,
-    data: {
-      cart,
-      pricing: {
-        subtotal: Number(subtotal.toFixed(2)),
-        discount: Number(discountAmount.toFixed(2)),
-        total
-      }
-    },
-    message: `Coupon ${couponCode} applied successfully`
-  });
-});
-
-exports.removeCoupon = asyncHandler(async (req, res) => {
-  const cart = await Cart.findOne({ user: req.user.id });
-
-  if (!cart) {
-    throw new AppError('Cart not found', 404);
-  }
-
-  if (!cart.appliedCoupon) {
-    throw new AppError('No coupon is currently applied to this cart', 400);
-  }
-
-  // Track coupon code for logging/response
-  const removedCouponCode = cart.appliedCoupon.code;
-
-  // Remove coupon from cart
-  cart.appliedCoupon = undefined;
-  await cart.save();
-  logger.info(`Coupon ${removedCouponCode} removed from cart for user ${req.user.id}`);
-
-  // Recalculate totals for response
-  await cart.populate('items.product', 'defaultPrice');
-  let subtotal = 0;
-  for (const item of cart.items) {
-    subtotal += item.product.defaultPrice * item.quantity;
-  }
-
-  res.status(200).json({
-    success: true,
-    data: {
-      cart,
-      pricing: {
-        subtotal: Number(subtotal.toFixed(2)),
-        discount: 0,
-        total: Number(subtotal.toFixed(2))
-      }
-    },
-    message: `Coupon ${removedCouponCode} removed successfully`
-  });
-});
-
-// Refactor getCartTotalPrice to use persisted coupon data
-exports.getCartTotalPrice = asyncHandler(async (req, res) => {
-  const cart = await Cart.findOne({ user: req.user.id })
-    .populate('items.product', 'defaultPrice');
-
-  if (!cart || cart.items.length === 0) {
-    return res.status(200).json({
-      success: true,
-      data: {
-        subtotal: 0,
-        discount: 0,
-        total: 0
-      }
-    });
-  }
-
-  // Calculate subtotal
-  let subtotal = 0;
-  for (const item of cart.items) {
-    if (!item.product || !item.product.defaultPrice) {
-      throw new AppError('Invalid product data in cart', 400);
-    }
-    subtotal += item.product.defaultPrice * item.quantity;
-  }
-
-  // Use persisted coupon if available
-  let discount = 0;
-  let couponDetails = null;
-
-  if (cart.appliedCoupon) {
-    discount = cart.appliedCoupon.discountAmount;
-    couponDetails = {
-      code: cart.appliedCoupon.code,
-      discount: cart.appliedCoupon.discount,
-      discountAmount: discount
-    };
-  }
-
-  const total = Number((subtotal - discount).toFixed(2));
-
-  res.status(200).json({
-    success: true,
-    data: {
-      subtotal: Number(subtotal.toFixed(2)),
-      discount: Number(discount.toFixed(2)),
-      total,
-      coupon: couponDetails
-    }
-  });
-}); */
-
 exports.applyCoupon = asyncHandler(async (req, res) => {
   const { couponCode } = req.body;
 
@@ -431,7 +268,11 @@ exports.applyCoupon = asyncHandler(async (req, res) => {
   // Find cart with minimal projection for efficiency
   let cart = await Cart.findOne({ user: req.user.id });
 
-  if (!cart || cart.items.length === 0) {
+  if (!cart) {
+    throw new AppError('Cart not found', 404);
+  }
+
+  if (cart.items.length === 0) {
     throw new AppError('Cannot apply coupon to an empty cart', 400);
   }
 

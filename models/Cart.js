@@ -1,27 +1,6 @@
-/* const mongoose = require('mongoose');
-
-const cartSchema = new mongoose.Schema({
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    items: [{
-        product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-        quantity: { type: Number, required: true, min: 1 }
-    }],
-    appliedCoupon: {
-        code: String,
-        discount: Number,
-        discountAmount: Number
-    },
-    createdAt: { type: Date, default: Date.now }
-}, { timestamps: true });
-
-const Cart = mongoose.model('Cart', cartSchema);
-
-module.exports = Cart; */
-
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-// Define CartItemSchema to enhance modularity
 const CartItemSchema = new Schema({
     product: {
         type: mongoose.Schema.Types.ObjectId,
@@ -35,7 +14,6 @@ const CartItemSchema = new Schema({
     }
 });
 
-// Define a dedicated CartPricingSchema for improved encapsulation
 const CartPricingSchema = new Schema({
     subtotal: {
         type: Number,
@@ -51,7 +29,6 @@ const CartPricingSchema = new Schema({
     }
 });
 
-// Define consistent CouponReferenceSchema that aligns with Coupon model
 const CouponReferenceSchema = new Schema({
     _id: {
         type: mongoose.Schema.Types.ObjectId,
