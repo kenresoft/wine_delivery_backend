@@ -12,17 +12,25 @@ const { isAuthenticated: protect, admin } = require('../middleware/authMiddlewar
 const router = express.Router();
 
 // Customer order routes
-router.post('/', protect, createOrder);
-router.get('/user', protect, getUserOrders);
-// router.get('/my-orders', protect, getMyOrders);
-router.get('/:id', /* protect, */ getOrderById);
-router.put('/:id/purchase', protect, makePurchase);
+router.route('/')
+    .post(protect, createOrder) // Create a new order from cart
+    .get(protect, admin, getAllOrders); // Get all orders (admin only)
 
-// Admin order routes
-router.get('/', protect, admin, getAllOrders);
-router.put('/:id/status', protect, admin, updateOrderStatus);
-router.get('/stats/dashboard', protect, admin, getOrderStats);
+// User-specific order routes
+router.get('/user', protect, getUserOrders); // Get orders for authenticated user
 
+// Order processing routes
+router.route('/:id/purchase')
+    .put(protect, makePurchase); // Process payment for an order
 
+// Order status management (admin only)
+router.route('/:id/status')
+    .put(protect, admin, updateOrderStatus); // Update order status
+
+// Order details
+router.get('/:id', protect, getOrderById); // Get order details (user or admin)
+
+// Admin analytics
+router.get('/stats/dashboard', protect, admin, getOrderStats); // Get order statistics for dashboard
 
 module.exports = router;
