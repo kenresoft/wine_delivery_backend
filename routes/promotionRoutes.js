@@ -2,22 +2,28 @@ const express = require('express');
 const {
     createPromotion,
     getAllPromotions,
-    getPromotionById,
+    getPromotion,
     updatePromotion,
     deletePromotion,
-    validatePromotionCode
+    getProductsByPromotion,
+    checkBulkEligibility
 } = require('../controllers/promotionController');
 const { isAuthenticated: protect, admin } = require('../middleware/authMiddleware');
+
 const router = express.Router();
 
-// Admin routes - protected with authentication and admin middleware
+// ADMIN ROUTES (Protected + Admin-only)
 router.post('/', protect, admin, createPromotion);
-router.get('/admin/all', protect, admin, getAllPromotions);
+router.get('/admin', protect, admin, getAllPromotions); // Filterable admin view
 router.put('/:id', protect, admin, updatePromotion);
 router.delete('/:id', protect, admin, deletePromotion);
 
-// Public routes - accessible to all users
-router.get('/:id', getPromotionById);
-router.post('/validate', validatePromotionCode);
+// PUBLIC ROUTES (Protected)
+router.get('/', protect, getAllPromotions); // Filterable public view
+router.get('/:id', protect, getPromotion);
+
+// PROMOTION APPLICATION ROUTES
+router.get('/:code/products', protect, getProductsByPromotion); // Get discounted products
+router.post('/check-eligibility', protect, checkBulkEligibility); // Bulk eligibility check
 
 module.exports = router;
