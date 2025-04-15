@@ -23,7 +23,7 @@ router.get('/', protect, getAllPromotions); // Filterable public view
 router.get('/:id', protect, getPromotion);
 
 // PROMOTION APPLICATION ROUTES
-router.get('/:code/products', protect, getProductsByPromotion); // Get discounted products
+router.get('/:promotionCode/products', protect, getProductsByPromotion); // Get discounted products
 router.post('/check-eligibility', protect, checkBulkEligibility); // Bulk eligibility check
 
 module.exports = router;

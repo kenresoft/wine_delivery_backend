@@ -191,10 +191,10 @@ exports.getProductsByPromotion = asyncHandler(async (req, res, next) => {
   const userId = req.user?._id;
 
   const promotion = await Promotion.findOne({
-    code: promotionCode.toUpperCase(),
-    isActive: true,
-    startDate: { $lte: new Date() },
-    endDate: { $gte: new Date() },
+    code: promotionCode,
+    // isActive: true,
+    // startDate: { $lte: new Date() },
+    // endDate: { $gte: new Date() },
   });
 
   if (!promotion) {
