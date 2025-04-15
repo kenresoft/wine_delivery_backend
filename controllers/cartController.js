@@ -59,27 +59,26 @@ exports.addToCart = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    data: cart,
+    cart: cart,
     message: 'Item added to cart successfully'
   });
 });
 
 exports.getCart = asyncHandler(async (req, res) => {
-  // Optimize with selective population pattern
   const cart = await Cart.findOne({ user: req.user.id })
     .populate('items.product', 'name defaultPrice image defaultQuantity');
 
   if (!cart) {
     return res.status(200).json({
       success: true,
-      data: { items: [] },
+      cart: { items: [] },
       message: 'Cart is empty'
     });
   }
 
   res.status(200).json({
     success: true,
-    data: cart
+    cart: cart
   });
 });
 
@@ -109,16 +108,13 @@ exports.updateCart = asyncHandler(async (req, res) => {
     throw new AppError('Requested quantity exceeds available inventory', 400);
   }
 
-  // Update cart item quantity
   cart.items[itemIndex].quantity = quantity;
   await cart.save();
-
-  // Populate for rich response
   await cart.populate('items.product', 'name defaultPrice image defaultQuantity');
 
   res.status(200).json({
     success: true,
-    data: cart,
+    cart: cart,
     message: 'Cart updated successfully'
   });
 });
@@ -140,13 +136,11 @@ exports.removeFromCart = asyncHandler(async (req, res) => {
   // Remove item with optimal array manipulation
   cart.items.splice(itemIndex, 1);
   await cart.save();
-
-  // Populate for rich response
   await cart.populate('items.product', 'name defaultPrice image defaultQuantity');
 
   res.status(200).json({
     success: true,
-    data: cart,
+    cart: cart,
     message: 'Item removed from cart'
   });
 });
@@ -190,16 +184,13 @@ exports.incrementCartItem = asyncHandler(async (req, res) => {
     throw new AppError('Cannot increment quantity: insufficient inventory', 400);
   }
 
-  // Increment quantity
   cart.items[itemIndex].quantity += 1;
   await cart.save();
-
-  // Populate for rich response
   await cart.populate('items.product', 'name defaultPrice image defaultQuantity');
 
   res.status(200).json({
     success: true,
-    data: cart,
+    cart: cart,
     message: 'Item quantity incremented'
   });
 });
@@ -218,7 +209,6 @@ exports.decrementCartItem = asyncHandler(async (req, res) => {
     throw new AppError('Item not found in cart', 404);
   }
 
-  // Handle removal if quantity would be zero
   if (cart.items[itemIndex].quantity === 1) {
     cart.items.splice(itemIndex, 1);
   } else {
@@ -226,25 +216,23 @@ exports.decrementCartItem = asyncHandler(async (req, res) => {
   }
 
   await cart.save();
-
-  // Populate for rich response
   await cart.populate('items.product', 'name defaultPrice image defaultQuantity');
 
   res.status(200).json({
     success: true,
-    data: cart,
+    cart: cart,
     message: 'Item quantity decremented'
   });
 });
 
-exports.getCartItemQuantity = asyncHandler(async (req, res) => {
+/* exports.getCartItemQuantity = asyncHandler(async (req, res) => {
   const itemId = req.params.itemId;
   const cart = await Cart.findOne({ user: req.user.id });
 
   if (!cart) {
     return res.status(200).json({
       success: true,
-      data: { quantity: 0 }
+      cart: { quantity: 0 }
     });
   }
 
@@ -252,11 +240,11 @@ exports.getCartItemQuantity = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    data: {
+    cart: {
       quantity: item ? item.quantity : 0
     }
   });
-});
+}); */
 
 exports.applyCoupon = asyncHandler(async (req, res) => {
   const { couponCode } = req.body;
@@ -303,16 +291,13 @@ exports.applyCoupon = asyncHandler(async (req, res) => {
 
   // Apply coupon using domain model method
   await cart.applyCoupon(coupon);
-
-  // Populate for rich response
   await cart.populate('items.product', 'name defaultPrice image defaultQuantity');
 
-  // Log application
   logger.info(`Coupon ${couponCode} applied to cart for user ${req.user.id}`);
 
   res.status(200).json({
     success: true,
-    data: cart,
+    cart: cart,
     message: `Coupon ${couponCode} applied successfully`
   });
 });
@@ -328,33 +313,26 @@ exports.removeCoupon = asyncHandler(async (req, res) => {
     throw new AppError('No coupon is currently applied to this cart', 400);
   }
 
-  // Track coupon code for logging/response
   const removedCouponCode = cart.appliedCoupon.code;
-
-  // Remove coupon using domain model method
   await cart.removeCoupon();
-
-  // Populate for rich response
   await cart.populate('items.product', 'name defaultPrice image defaultQuantity');
 
-  // Log removal
   logger.info(`Coupon ${removedCouponCode} removed from cart for user ${req.user.id}`);
 
   res.status(200).json({
     success: true,
-    data: cart,
-    message: `Coupon ${removedCouponCode} removed successfully`
+    cart: cart,
+    message: `Coupon ${removedCouponCode} removed successfully` 
   });
 });
 
-// Simplified getCartTotalPrice using domain model encapsulation
-exports.getCartTotalPrice = asyncHandler(async (req, res) => {
+/* exports.getCartTotalPrice = asyncHandler(async (req, res) => {
   const cart = await Cart.findOne({ user: req.user.id });
 
   if (!cart || cart.items.length === 0) {
     return res.status(200).json({
       success: true,
-      data: {
+      cart: {
         subtotal: 0,
         discount: 0,
         total: 0
@@ -365,6 +343,8 @@ exports.getCartTotalPrice = asyncHandler(async (req, res) => {
   // Simply return the pricing object - calculation handled by model
   res.status(200).json({
     success: true,
-    data: cart.pricing
+    cart: {
+      pricing: cart.pricing
+    }
   });
-});
+}); */

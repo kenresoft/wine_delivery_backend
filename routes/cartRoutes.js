@@ -18,11 +18,10 @@ const router = express.Router();
 
 router.put('/increment/:itemId', protect, incrementCartItem);
 router.put('/decrement/:itemId', protect, decrementCartItem);
-router.get('/quantity/:itemId', protect, getCartItemQuantity);
+// router.get('/quantity/:itemId', protect, getCartItemQuantity);
 router.post('/apply-coupon', protect, applyCoupon);
 router.delete('/remove-coupon', protect, removeCoupon);
-router.get('/price', protect, getCartTotalPrice);
-// router.get('/total', protect, getCartTotalPrice);
+// router.get('/price', protect, getCartTotalPrice);
 
 router.post('/add', protect, addToCart);
 router.get('/', protect, getCart);
