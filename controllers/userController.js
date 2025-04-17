@@ -35,36 +35,103 @@ exports.getUserById = async (req, res) => {
 };
 
 exports.updateUser = async (req, res) => {
-    try {
-        // Handle file upload if a profile image is provided
-        upload.uploadProfileImage(req, res, async (err) => {
-            if (err) {
-                return res.status(400).json({ success: false, error: err });
-            }
+    upload.uploadProfileImage(req, res, async (uploadErr) => {
+        if (uploadErr) {
+            return res.status(400).json({ success: false, error: uploadErr.message || uploadErr });
+        }
 
+        try {
             const { id } = req.params;
-            const updates = req.body;
-
-            // If a new profile image is uploaded, update the path in the user data
-            if (req.file) {
-                updates.profileImage = `/uploads/profileImages/${req.file.filename}`;
-            }
-
-            const user = await User.findByIdAndUpdate(id, updates, { new: true }).select('-password').populate({
-                path: 'favorites',
-                select: 'product',
-            });
+            const user = await User.findById(id);
 
             if (!user) {
                 return res.status(404).json({ success: false, message: 'User not found' });
             }
 
-            res.status(200).json({ success: true, user });
-        });
+            const {
+                username,
+                email,
+                password,
+                gender,
+                phone,
+                bio,
+                location,
+                isAdmin,
+                status,
+            } = req.body;
+
+            // Update scalar fields if provided
+            if (username) user.username = username;
+            if (email) user.email = email;
+            if (password) user.password = password; // will be hashed by schema
+            if (gender) user.gender = gender;
+            if (phone) user.phone = phone;
+            if (bio) user.bio = bio;
+            if (typeof isAdmin !== 'undefined') user.isAdmin = isAdmin;
+            if (typeof status !== 'undefined') user.status = status;
+
+            // Update location if provided
+            if (location && typeof location === 'object') {
+                user.location.country = location.country || user.location.country;
+                user.location.state = location.state || user.location.state;
+                user.location.city = location.city || user.location.city;
+            }
+
+            // Handle profile image
+            if (req.file) {
+                user.profileImage = `/uploads/profileImages/${req.file.filename}`;
+            }
+
+            // Save updated user
+            await user.save();
+
+            // Remove password and populate favorites
+            const updatedUser = await User.findById(user._id)
+                .select('-password')
+                .populate({
+                    path: 'favorites',
+                    select: 'product',
+                });
+
+            res.status(200).json({ success: true, user: updatedUser });
+        } catch (error) {
+            console.error('Update User Error:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+};
+
+exports.updatePassword = async (req, res) => {
+    try {
+        const userId = req.user.id; // from authenticated token
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ success: false, message: 'Both current and new passwords are required.' });
+        }
+
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found.' });
+        }
+
+        const isMatch = await user.comparePassword(currentPassword);
+
+        if (!isMatch) {
+            return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+        }
+
+        user.password = newPassword; // Schema handles hashing
+        await user.save(); // triggers pre('save') and hashes it
+
+        res.status(200).json({ success: true, message: 'Password updated successfully.' });
     } catch (error) {
-        res.status(400).json({ success: false, error: error.message });
+        console.error('Update Password Error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 };
+
 
 exports.saveDeviceToken = async (req, res) => {
     const { deviceToken } = req.body;
