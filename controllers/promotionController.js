@@ -1,299 +1,427 @@
-const Promotion = require("../models/Promotion");
-const Product = require("../models/Product");
-const User = require("../models/User");
-const logger = require("../utils/logger");
 const { asyncHandler } = require('../middleware/asyncHandler');
 const AppError = require("../utils/AppError");
+const logger = require("../utils/logger");
+const Promotion = require('../models/Promotion');
+const Product = require('../models/Product');
+const User = require('../models/User');
+const { performance } = require('perf_hooks');
+const promotionTransformer = require('../transformers/promotionTransformer');
 
-// Helper: Generate random promo code
-const generatePromoCode = () => {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from({ length: 8 }, () =>
-    chars.charAt(Math.floor(Math.random() * chars.length))
-  ).join("");
-};
+/**
+ * Constructs optimal query conditions for fetching relevant products
+ * @param {Object} promotion - The promotion document
+ * @returns {Object} MongoDB query object
+ */
+const buildProductQuery = (promotion) => {
+    const query = { defaultQuantity: { $gt: 0 } };
+    const conditions = [];
 
-// Helper: Calculate safe discounted price
-const calculateDiscount = (originalPrice, promotion) => {
-  let discountedPrice = originalPrice;
-  if (promotion.discountType === "percentage") {
-    const discountAmount = originalPrice * (promotion.discountValue / 100);
-    discountedPrice -=
-      promotion.maximumDiscount && discountAmount > promotion.maximumDiscount
-        ? promotion.maximumDiscount
-        : discountAmount;
-  } else if (promotion.discountType === "fixed") {
-    discountedPrice -= promotion.discountValue;
-  }
-  return Math.max(0, Math.min(originalPrice, discountedPrice)).toFixed(2);
-};
-
-// Helper: Check user eligibility
-const isUserEligible = async (user, promotion) => {
-  // Location check
-  if (
-    promotion.locations.length > 0 &&
-    user?.location &&
-    !promotion.locations.includes(user.location.toLowerCase())
-  ) {
-    return false;
-  }
-
-  // First-purchase check
-  if (promotion.isFirstPurchaseOnly && user?.orderHistory?.length > 0) {
-    return false;
-  }
-
-  // User inclusion/exclusion
-  if (user?._id) {
-    if (
-      promotion.includedUsers.length > 0 &&
-      !promotion.includedUsers.some((id) => id.equals(user._id))
-    ) {
-      return false;
+    if (promotion.applicableProducts?.length > 0) {
+        const validProductIds = promotion.applicableProducts.filter(id => 
+            mongoose.Types.ObjectId.isValid(id)
+        );
+        conditions.push({ _id: { $in: validProductIds } });
     }
-    if (promotion.excludedUsers.some((id) => id.equals(user._id))) {
-      return false;
-    }
-  }
 
-  return true;
+    if (promotion.applicableCategories?.length > 0) {
+        conditions.push({ category: { $in: promotion.applicableCategories } });
+    }
+
+    if (conditions.length > 0) {
+        query.$or = conditions;
+    }
+
+    return query;
 };
 
-// 1. CREATE - Add new promotion
+/**
+ * Creates response data for promotion with optional product data
+ * @private
+ */
+const enhancePromotionWithProducts = async (promotion, user = null) => {
+    const startTime = performance.now();
+
+    // Check eligibility
+    const isEligible = user ? await promotion.checkEligibility(user) : true;
+
+    const query = buildProductQuery(promotion);
+
+    // Fetch relevant products
+    const products = await Product.find(query)
+        .select('name description category defaultPrice defaultQuantity stockStatus images')
+        .lean();
+
+    // Transform products with discount info
+    const promotionProducts = products.map(product => {
+        const originalPrice = product.defaultPrice;
+        const discountedPrice = promotion.calculateDiscountedPrice(originalPrice);
+        const discountAmount = parseFloat((originalPrice - discountedPrice).toFixed(2));
+
+        return {
+            product,
+            originalPrice,
+            discountedPrice,
+            discountAmount,
+            discountPercentage: parseFloat(((discountAmount / originalPrice) * 100).toFixed(2)),
+        };
+    });
+
+    const duration = performance.now() - startTime;
+    logger.debug(`Product enhancement completed in ${duration.toFixed(2)}ms for ${promotion.code}`);
+
+    return { promotion, promotionProducts, isEligible };
+};
+
+/**
+ * @desc    Create new promotion
+ * @route   POST /api/promotions
+ * @access  Private/Admin
+ */
 exports.createPromotion = asyncHandler(async (req, res) => {
-  const promotionData = {
-    ...req.body,
-    code: req.body.code || generatePromoCode(),
-    isVisible: req.body.isVisible ?? true,
-  };
+    const { body } = req;
 
-  const promotion = await Promotion.create(promotionData);
-  logger.info(`Promotion created: ${promotion.code} (ID: ${promotion._id})`);
+    const promotionData = {
+        ...body,
+        code: body.code || Promotion.generatePromoCode()
+    };
 
-  res.status(201).json({
-    success: true,
-    data: promotion,
-  });
+    const promotion = await Promotion.create(promotionData);
+
+    logger.info(`Promotion created: ${promotion.code} (ID: ${promotion._id})`);
+
+    const transformedPromotion = promotionTransformer.transformPromotion(promotion, {
+        isAdmin: true
+    });
+
+    res.status(201).json({
+        success: true,
+        data: transformedPromotion
+    });
 });
 
-// 2. READ - Get all promotions (with filtering)
-exports.getAllPromotions = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, isActive, discountType } = req.query;
-  const filter = {};
-
-  // Filter by active status
-  if (isActive === 'true') {
-    const now = new Date();
-    filter.startDate = { $lte: now };
-    filter.endDate = { $gte: now };
-    filter.isActive = true;
-  }
-
-  // Filter by discount type
-  if (discountType && ['percentage', 'fixed', 'freeShipping'].includes(discountType)) {
-    filter.discountType = discountType;
-  }
-
-  const promotions = await Promotion.find(filter)
-    .skip((page - 1) * limit)
-    .limit(limit);
-
-  logger.info(`Fetched ${promotions.length} promotions`);
-
-  res.status(200).json({
-    success: true,
-    count: promotions.length,
-    data: promotions,
-  });
-});
-
-// 3. READ - Get single promotion by ID
-exports.getPromotion = asyncHandler(async (req, res, next) => {
-  const promotion = await Promotion.findById(req.params.id);
-
-  if (!promotion) {
-    logger.warn(`Promotion not found with ID: ${req.params.id}`);
-    return next(
-      new AppError(`Promotion not found with ID: ${req.params.id}`, 404, {
-        code: "PROMO_NOT_FOUND",
-      })
-    );
-  }
-
-  logger.info(`Fetched promotion: ${promotion.code} (ID: ${promotion._id})`);
-  res.status(200).json({
-    success: true,
-    data: promotion,
-  });
-});
-
-// 4. UPDATE - Update promotion by ID
+/**
+ * @desc    Update promotion
+ * @route   PUT /api/promotions/:id
+ * @access  Private/Admin
+ */
 exports.updatePromotion = asyncHandler(async (req, res, next) => {
-  let promotion = await Promotion.findById(req.params.id);
+    const { params: { id: promotionId }, body: { code } } = req;
+    const promotion = await Promotion.findById(promotionId);
 
-  if (!promotion) {
-    logger.warn(`Promotion not found for update: ${req.params.id}`);
-    return next(
-      new AppError(`Promotion not found with ID: ${req.params.id}`, 404, {
-        code: "PROMO_NOT_FOUND",
-      })
-    );
-  }
-
-  // Prevent code changes if already set
-  if (promotion.code && req.body.code && promotion.code !== req.body.code) {
-    logger.warn(`Attempted to modify promotion code: ${promotion.code} -> ${req.body.code}`);
-    return next(
-      new AppError("Promotion code cannot be modified once set", 400, {
-        code: "IMMUTABLE_CODE",
-      })
-    );
-  }
-
-  promotion = await Promotion.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true,
-  });
-
-  logger.info(`Updated promotion: ${promotion.code} (ID: ${promotion._id})`);
-  res.status(200).json({
-    success: true,
-    data: promotion,
-  });
-});
-
-// 5. DELETE - Delete promotion by ID
-exports.deletePromotion = asyncHandler(async (req, res, next) => {
-  const promotion = await Promotion.findById(req.params.id);
-
-  if (!promotion) {
-    logger.warn(`Promotion not found for deletion: ${req.params.id}`);
-    return next(
-      new AppError(`Promotion not found with ID: ${req.params.id}`, 404, {
-        code: "PROMO_NOT_FOUND",
-      })
-    );
-  }
-
-  await promotion.deleteOne();
-  logger.info(`Deleted promotion: ${promotion.code} (ID: ${promotion._id})`);
-
-  res.status(200).json({
-    success: true,
-    data: {},
-  });
-});
-
-// 6. SPECIAL - Get products by promotion
-exports.getProductsByPromotion = asyncHandler(async (req, res, next) => {
-  const { promotionCode } = req.params;
-  const userId = req.user?._id;
-
-  const promotion = await Promotion.findOne({
-    code: promotionCode,
-    // isActive: true,
-    // startDate: { $lte: new Date() },
-    // endDate: { $gte: new Date() },
-  });
-
-  if (!promotion) {
-    logger.warn(`Promotion not found or expired: ${promotionCode}`);
-    return next(
-      new AppError("Promotion not found or expired", 404, {
-        code: "PROMO_NOT_FOUND",
-      })
-    );
-  }
-
-  // Check visibility and eligibility
-  if (!promotion.isVisible && !userId) {
-    logger.warn(`Unauthorized access attempt to private promotion: ${promotionCode}`);
-    return next(
-      new AppError("Log in to check eligibility for this promotion", 403, {
-        code: "LOGIN_REQUIRED",
-      })
-    );
-  }
-
-  const user = userId ? await User.findById(userId).select("location orderHistory") : null;
-  if (!promotion.isVisible && !(await isUserEligible(user, promotion))) {
-    logger.warn(`Ineligible user attempted to access promotion: ${userId} -> ${promotionCode}`);
-    return next(
-      new AppError("You don't qualify for this promotion", 403, {
-        code: "PROMO_NOT_ELIGIBLE",
-      })
-    );
-  }
-
-  // Fetch products with aggregation
-  const products = await Product.aggregate([
-    {
-      $match: {
-        $or: [
-          { _id: { $in: promotion.applicableProducts } },
-          { category: { $in: promotion.applicableCategories } },
-        ],
-        stock: { $gt: 0 },
-      },
-    },
-  ]);
-
-  // Apply discounts and log low stock
-  const LOW_STOCK_THRESHOLD = 10;
-  const discountedProducts = products.map((product) => {
-    if (product.stock < LOW_STOCK_THRESHOLD) {
-      logger.warn(`Low stock for promoted product: ${product.name} (ID: ${product._id})`);
+    if (!promotion) {
+        logger.warn(`Promotion not found for update: ${promotionId}`);
+        return next(new AppError(`Promotion not found with ID: ${promotionId}`, 404, { code: 'PROMO_NOT_FOUND' }));
     }
 
-    return {
-      ...product,
-      discountedPrice: calculateDiscount(product.defaultPrice, promotion),
-      originalPrice: product.defaultPrice,
-      isEligible: userId ? isUserEligible(user, promotion) : false,
-    };
-  });
+    if (code && promotion.code !== code && promotion.currentUsageCount > 0) {
+        logger.warn(`Code modification attempted: ${promotion.code} -> ${code}`);
+        return next(new AppError('Promotion code cannot be modified once used', 400, { code: 'IMMUTABLE_CODE' }));
+    }
 
-  logger.info(`Fetched ${discountedProducts.length} products for promotion: ${promotion.code}`);
-  res.status(200).json({
-    success: true,
-    count: discountedProducts.length,
-    data: discountedProducts,
-  });
+    const updatedPromotion = await Promotion.findByIdAndUpdate(
+        promotionId,
+        req.body,
+        { new: true, runValidators: true }
+    );
+
+    logger.info(`Updated promotion: ${updatedPromotion.code} (ID: ${updatedPromotion._id})`);
+
+    const transformedPromotion = promotionTransformer.transformPromotion(updatedPromotion, {
+        isAdmin: true
+    });
+
+    res.status(200).json({
+        success: true,
+        data: transformedPromotion
+    });
 });
 
-// 7. SPECIAL - Batch eligibility check
-exports.checkBulkEligibility = asyncHandler(async (req, res, next) => {
-  const { promotionIds } = req.body;
-  const userId = req.user._id;
+/**
+ * @desc    Delete promotion
+ * @route   DELETE /api/promotions/:id
+ * @access  Private/Admin
+ */
+exports.deletePromotion = asyncHandler(async (req, res, next) => {
+    const { params: { id: promotionId } } = req;
+    const promotion = await Promotion.findById(promotionId);
 
-  if (!promotionIds || !Array.isArray(promotionIds)) {
-    logger.error(`Invalid promotion IDs provided: ${promotionIds}`);
-    return next(
-      new AppError("Invalid promotion IDs", 400, {
-        code: "INVALID_INPUT",
-      })
+    if (!promotion) {
+        logger.warn(`Promotion not found for deletion: ${promotionId}`);
+        return next(new AppError(`Promotion not found with ID: ${promotionId}`, 404, { code: 'PROMO_NOT_FOUND' }));
+    }
+
+    if (promotion.currentUsageCount > 0) {
+        logger.warn(`Attempted deletion of used promotion: ${promotion.code}`);
+        return next(new AppError('Cannot delete promotion that has been used. Consider deactivating instead.', 400, { code: 'PROMOTION_IN_USE' }));
+    }
+
+    await promotion.deleteOne();
+    logger.info(`Deleted promotion: ${promotion.code} (ID: ${promotion._id})`);
+    res.status(200).json({ success: true, data: {} });
+});
+
+/**
+ * @desc    Get all promotions with filtering
+ * @route   GET /api/promotions
+ * @access  Public/Admin
+ */
+exports.getAllPromotions = asyncHandler(async (req, res) => {
+    const startTime = performance.now();
+    const user = req.user ? await User.findById(req.user.id) : null;
+    const {
+        query: {
+            page = 1,
+            limit = 10,
+            sortBy = 'createdAt',
+            sortOrder = -1,
+            includeProducts = 'false',
+            ...filterParams
+        },
+        isAdmin
+    } = req;
+
+    const parsedPage = Math.max(1, parseInt(page, 10));
+    const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const sortOptions = { [sortBy]: parseInt(sortOrder, 10) };
+    const options = {
+        skip: (parsedPage - 1) * parsedLimit,
+        limit: parsedLimit,
+        sort: sortOptions
+    };
+
+    const [promotions, total] = await Promise.all([
+        Promotion.find(Promotion.buildFilters(filterParams, isAdmin), null, options),
+        Promotion.countDocuments(Promotion.buildFilters(filterParams, isAdmin)),
+    ]);
+
+    // Process promotions based on user context
+    const includeProductsFlag = includeProducts.toLowerCase() === 'true';
+    const enhancedPromotions = includeProductsFlag
+        ? await Promise.all(promotions.map(p => enhancePromotionWithProducts(p, user)))
+        : await Promise.all(promotions.map(async p => {
+            const isEligible = user ? await p.checkEligibility(user) : true;
+            return { promotion: p, isEligible };
+        }));
+
+    // Transform using our new transformer
+    const transformedPromotions = promotionTransformer.transformPromotionCollection(
+        enhancedPromotions,
+        {
+            isAdmin,
+            includeProducts: includeProductsFlag
+        }
     );
-  }
 
-  const user = await User.findById(userId).select("location orderHistory");
-  const promotions = await Promotion.find({
-    _id: { $in: promotionIds },
-    isActive: true,
-  });
+    const duration = performance.now() - startTime;
+    logger.info(`Fetched ${promotions.length} promotions in ${duration.toFixed(2)}ms`);
 
-  const results = await Promise.all(
-    promotions.map(async (promo) => ({
-      _id: promo._id,
-      code: promo.code,
-      isEligible: await isUserEligible(user, promo),
-    }))
-  );
+    res.status(200).json({
+        success: true,
+        count: transformedPromotions.length,
+        pagination: promotionTransformer.createPaginationMetadata(total, parsedPage, parsedLimit),
+        data: transformedPromotions,
+        performance: { executionTime: `${duration.toFixed(2)}ms` },
+    });
+});
 
-  logger.info(`Checked eligibility for ${results.length} promotions (User: ${userId})`);
-  res.status(200).json({
-    success: true,
-    count: results.length,
-    data: results,
-  });
+/**
+ * @desc    Get single promotion by ID
+ * @route   GET /api/promotions/:id
+ * @access  Public/Admin
+ */
+exports.getPromotion = asyncHandler(async (req, res, next) => {
+    const startTime = performance.now();
+    const { id: promotionId } = req.params;
+    const user = req.user ? await User.findById(req.user.id) : null;
+    const isAdmin = req.isAdmin;
+
+    if (!promotionId) {
+        return next(new AppError('Promotion ID is required', 400, { code: 'MISSING_PROMO_ID' }));
+    }
+
+    const promotion = await Promotion.findById(promotionId);
+    if (!promotion) {
+        return next(new AppError(`Promotion not found with ID: ${promotionId}`, 404, { code: 'PROMO_NOT_FOUND' }));
+    }
+
+    const includeProducts = req.query.includeProducts?.toLowerCase() === 'true';
+
+    // Enhance promotion with products if needed
+    const enhancedPromotion = includeProducts
+        ? await enhancePromotionWithProducts(promotion, user)
+        : {
+            promotion,
+            isEligible: user ? await promotion.checkEligibility(user) : true,
+            promotionProducts: []
+        };
+
+    // Transform the response
+    const transformedPromotion = promotionTransformer.transformPromotion(
+        enhancedPromotion.promotion,
+        {
+            isAdmin,
+            includeProducts,
+            isEligible: enhancedPromotion.isEligible,
+            promotionProducts: enhancedPromotion.promotionProducts
+        }
+    );
+
+    const duration = performance.now() - startTime;
+    logger.info(`Fetched promotion: ${promotion.code} in ${duration.toFixed(2)}ms`);
+
+    res.status(200).json({
+        success: true,
+        data: transformedPromotion,
+        performance: { duration: `${duration.toFixed(2)}ms` }
+    });
+});
+
+//  Get promotion usage statistics
+exports.getPromotionStats = asyncHandler(async (req, res, next) => {
+    if (!req.isAdmin) {
+        return next(
+            new AppError("Unauthorized access to analytics", 403, {
+                code: "UNAUTHORIZED",
+            })
+        );
+    }
+
+    const { promotionId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    const matchCriteria = {};
+    if (promotionId) {
+        matchCriteria._id = mongoose.Types.ObjectId(promotionId);
+    }
+
+    if (startDate && endDate) {
+        matchCriteria.createdAt = {
+            $gte: new Date(startDate),
+            $lte: new Date(endDate)
+        };
+    }
+
+    const stats = await Promotion.aggregate([
+        { $match: matchCriteria },
+        {
+            $lookup: {
+                from: 'orders',
+                let: { promoCode: '$code' },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $in: [
+                                    '$$promoCode',
+                                    {
+                                        $map: {
+                                            input: '$appliedPromotions',
+                                            in: '$$this.code'
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ],
+                as: 'orders'
+            }
+        },
+        {
+            $project: {
+                code: 1,
+                title: 1,
+                discountType: 1,
+                discountValue: 1,
+                startDate: 1,
+                endDate: 1,
+                currentUsageCount: 1,
+                totalUsageLimit: 1,
+                status: {
+                    $cond: [
+                        { $gt: [new Date(), '$endDate'] },
+                        'expired',
+                        {
+                            $cond: [
+                                { $lt: [new Date(), '$startDate'] },
+                                'scheduled',
+                                {
+                                    $cond: [
+                                        {
+                                            $and: [
+                                                { $ne: ['$totalUsageLimit', null] },
+                                                { $gte: ['$currentUsageCount', '$totalUsageLimit'] }
+                                            ]
+                                        },
+                                        'limit_reached',
+                                        'active'
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                totalRevenue: {
+                    $sum: '$orders.total'
+                },
+                orderCount: {
+                    $size: '$orders'
+                },
+                averageOrderValue: {
+                    $cond: [
+                        { $eq: [{ $size: '$orders' }, 0] },
+                        0,
+                        { $divide: [{ $sum: '$orders.total' }, { $size: '$orders' }] }
+                    ]
+                },
+                totalDiscountAmount: {
+                    $sum: {
+                        $map: {
+                            input: '$orders',
+                            as: 'order',
+                            in: {
+                                $reduce: {
+                                    input: {
+                                        $filter: {
+                                            input: '$$order.appliedPromotions',
+                                            as: 'promo',
+                                            cond: { $eq: ['$$promo.code', '$code'] }
+                                        }
+                                    },
+                                    initialValue: 0,
+                                    in: { $add: ['$$value', '$$this.discountAmount'] }
+                                }
+                            }
+                        }
+                    }
+                },
+                usagePercent: {
+                    $cond: [
+                        { $eq: ['$totalUsageLimit', null] },
+                        null,
+                        {
+                            $multiply: [
+                                { $divide: ['$currentUsageCount', '$totalUsageLimit'] },
+                                100
+                            ]
+                        }
+                    ]
+                },
+                remainingUsages: {
+                    $cond: [
+                        { $eq: ['$totalUsageLimit', null] },
+                        null,
+                        { $subtract: ['$totalUsageLimit', '$currentUsageCount'] }
+                    ]
+                }
+            }
+        }
+    ]);
+
+    logger.info(`Generated statistics for ${stats.length} promotions`);
+    res.status(200).json({
+        success: true,
+        count: stats.length,
+        data: stats,
+    });
 });
