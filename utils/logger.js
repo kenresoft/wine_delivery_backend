@@ -23,6 +23,12 @@ const logToFile = (level, message) => {
 };
 
 const logger = {
+  debug: (msg) => {
+    const formatted = `[${getTimestamp()}] [DEBUG] ${msg}`;
+    console.debug(`\x1b[35m%s\x1b[0m`, formatted); // Magenta
+    logToFile('debug', msg);
+  },
+  
   info: (msg) => {
     const formatted = `[${getTimestamp()}] [INFO] ${msg}`;
     console.log(`\x1b[36m%s\x1b[0m`, formatted); // Cyan
