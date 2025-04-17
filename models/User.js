@@ -2,17 +2,36 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 
 const userSchema = new mongoose.Schema({
+    // Authentication and Authorization
     username: { type: String, required: true, unique: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     isAdmin: { type: Boolean, default: false },
+    otpCode: { type: String },
+    otpExpiresAt: { type: Date },
+    status: { type: Boolean, default: true },
+
+    // Personal Information
+    gender: { type: String },
+    phone: { type: String },
+    bio: { type: String },
     profileImage: { type: String },
+
+    // Location Information
+    location: {
+        country: { type: String },
+        state: { type: String },
+        city: { type: String },
+    },
+
+    // E-commerce Related
+    orders: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Order' }],
     favorites: [{
         type: mongoose.Schema.Types.ObjectId, ref: 'Favorite',
     }],
-    otpCode: { type: String },            // OTP code field
-    otpExpiresAt: { type: Date },          // OTP expiration field
-    deviceTokens: { type: [String], default: [] }, // Firebase device token field
+
+    // Device Information
+    deviceTokens: { type: [String], default: [] },
 });
 
 // Password hashing middleware

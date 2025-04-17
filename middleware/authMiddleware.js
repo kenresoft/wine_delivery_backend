@@ -18,6 +18,7 @@ exports.isAuthenticated = async (req, res, next) => {
         }
 
         req.user = user;
+        req.isAdmin = user.isAdmin;
         next();
     } catch (error) {
         console.error('Authentication Error:', error.message);
