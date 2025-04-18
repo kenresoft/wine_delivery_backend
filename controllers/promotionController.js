@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { asyncHandler } = require('../middleware/asyncHandler');
 const AppError = require("../utils/AppError");
 const logger = require("../utils/logger");
@@ -17,10 +18,7 @@ const buildProductQuery = (promotion) => {
     const conditions = [];
 
     if (promotion.applicableProducts?.length > 0) {
-        const validProductIds = promotion.applicableProducts.filter(id => 
-            mongoose.Types.ObjectId.isValid(id)
-        );
-        conditions.push({ _id: { $in: validProductIds } });
+        conditions.push({ _id: { $in: promotion.applicableProducts } });
     }
 
     if (promotion.applicableCategories?.length > 0) {
@@ -48,7 +46,7 @@ const enhancePromotionWithProducts = async (promotion, user = null) => {
 
     // Fetch relevant products
     const products = await Product.find(query)
-        .select('name description category defaultPrice defaultQuantity stockStatus images')
+        .select('name description category defaultPrice defaultQuantity stockStatus image')
         .lean();
 
     // Transform products with discount info
@@ -315,7 +313,7 @@ exports.getPromotionStats = asyncHandler(async (req, res, next) => {
                                     '$$promoCode',
                                     {
                                         $map: {
-                                            input: '$appliedPromotions',
+                                            input: { $ifNull: ['$appliedPromotions', []] },
                                             in: '$$this.code'
                                         }
                                     }

@@ -70,20 +70,7 @@ exports.transformPromotion = (promotion, options = {}) => {
 
     // Add transformed product data if requested
     if (includeProducts && promotionProducts.length > 0) {
-        response.promotionProducts = promotionProducts.map(item => ({
-            productId: item.product._id,
-            name: item.product.name,
-            description: item.product.description,
-            category: item.product.category,
-            stockStatus: item.product.stockStatus,
-            imageUrl: item.product.images?.[0]?.url || null,
-            pricing: {
-                originalPrice: item.originalPrice,
-                discountedPrice: item.discountedPrice,
-                discountAmount: item.discountAmount,
-                discountPercentage: item.discountPercentage
-            }
-        }));
+        response.promotionProducts = promotionProducts;
     }
 
     return response;
