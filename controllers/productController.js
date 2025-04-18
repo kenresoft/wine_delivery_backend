@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const path = require('path');
 const Product = require('../models/Product');
+const FlashSale = require('../models/FlashSale');
+const Promotion = require('../models/Promotion');
 const Category = require('../models/Category');
 const Order = require('../models/Order');
 const upload = require('../middleware/upload');
@@ -10,6 +12,7 @@ const {
     deleteOldFile,
 } = require('../utils/product');
 const dotenv = require('dotenv');
+const logger = require('../utils/logger');
 
 dotenv.config();
 
@@ -1015,4 +1018,147 @@ exports.getRelatedProducts = async (req, res) => {
             error: error.message
         });
     }
-}; 
+};
+
+
+// PRICING
+exports.getProductWithPricing = async (req, res) => {
+    try {
+        const { productId } = req.params;
+        const product = await Product.findById(productId)
+            .populate('category')
+            .populate('suppliers')
+            .populate('variants');
+
+        if (!product) {
+            return res.status(404).json({ success: false, message: 'Product not found' });
+        }
+
+        // Get active flash sales
+        const now = new Date();
+        const activeFlashSales = await FlashSale.find({
+            isActive: true,
+            startDate: { $lte: now },
+            endDate: { $gte: now },
+            $or: [
+                { stockRemaining: { $gt: 0 } },
+                { stockRemaining: null }
+            ],
+            'flashSaleProducts.product': product._id
+        }).populate('flashSaleProducts.product');
+
+        // logger.debug(activeFlashSales);
+
+        // Get active promotions
+        const activePromotions = await Promotion.findActivePromotions({
+            $or: [
+                { applicableProducts: product._id },
+                { applicableCategories: product.category }
+            ]
+        });
+
+        getProductDetails(product);
+
+        // Calculate related products
+        const matchedProducts = await calculateRelatedProducts(product);
+        product.relatedProducts = matchedProducts;
+
+        // Calculate best price using serverside logic
+        const pricingData = calculateBestPrice(product, activeFlashSales, activePromotions);
+
+        // Merge product data with pricing information
+        const enrichedProduct = {
+            ...product.toObject(),
+            pricing: pricingData
+        };
+
+        res.status(200).json({
+            success: true,
+            data: enrichedProduct
+        });
+    } catch (error) {
+        console.error('Error fetching product with pricing:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching product pricing information'
+        });
+    }
+};
+
+function calculateBestPrice(product, activeFlashSales, activePromotions) {
+    const regularPrice = product.defaultPrice;
+    let bestPrice = regularPrice;
+    let priceType = 'regular';
+    let activePromotion = null;
+    let activeFlashSale = null;
+
+    // Check flash sales
+    for (const flashSale of activeFlashSales) {
+        const flashSaleProduct = flashSale.flashSaleProducts.find(
+            fsp => fsp.product._id.toString() === product._id.toString()
+        );
+
+        logger.info(flashSaleProduct);
+
+        if (flashSaleProduct && flashSaleProduct.specialPrice < bestPrice) {
+            bestPrice = flashSaleProduct.specialPrice;
+            priceType = 'flashSale';
+            activeFlashSale = {
+                id: flashSale._id,
+                title: flashSale.title,
+                endDate: flashSale.endDate,
+                timeRemaining: flashSale.getTimeRemaining(),
+                timeRemainingFormatted: formatTimeRemaining(flashSale.getTimeRemaining())
+            };
+        }
+    }
+
+    // Check promotions
+    for (const promotion of activePromotions) {
+        const discountedPrice = promotion.calculateDiscountedPrice(regularPrice);
+
+        if (discountedPrice < bestPrice) {
+            bestPrice = discountedPrice;
+            priceType = 'promotion';
+            activePromotion = {
+                id: promotion._id,
+                title: promotion.title,
+                code: promotion.code,
+                discountType: promotion.discountType,
+                discountValue: promotion.discountValue
+            };
+        }
+    }
+
+    // Calculate savings
+    const savingsAmount = regularPrice - bestPrice;
+    const savingsPercentage = regularPrice > 0
+        ? Math.round((savingsAmount / regularPrice) * 100)
+        : 0;
+
+    return {
+        regularPrice,
+        bestPrice,
+        savingsAmount,
+        savingsPercentage,
+        priceType,
+        hasDiscount: bestPrice < regularPrice,
+        discountPercentageFormatted: `${savingsPercentage}%`,
+        activePromotion,
+        activeFlashSale
+    };
+}
+
+function formatTimeRemaining(milliseconds) {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+    let formatted = '';
+    if (days > 0) formatted += `${days}d `;
+    if (hours > 0 || days > 0) formatted += `${hours}h `;
+    formatted += `${minutes}m`;
+
+    return { formatted, days, hours, minutes };
+}

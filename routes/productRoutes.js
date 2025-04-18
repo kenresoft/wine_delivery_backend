@@ -15,7 +15,8 @@ const {
     getNewArrivals,
     getProductsOnSale,
     getRelatedProducts,
-    getPopularProducts
+    getPopularProducts,
+    getProductWithPricing
 } = require('../controllers/productController');
 
 const { isAuthenticated: protect, admin } = require('../middleware/authMiddleware');
@@ -41,5 +42,7 @@ router.get('/listings/top-rated', getTopRatedProducts); // ✅
 router.get('/listings/new-arrivals', getNewArrivals); // ✅
 router.get('/listings/on-sale', getProductsOnSale); // ✅
 router.get('/related/:productId', getRelatedProducts);
+
+router.get('/:productId/with-pricing', getProductWithPricing);
 
 module.exports = router;
